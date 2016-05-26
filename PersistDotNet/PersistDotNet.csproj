@@ -34,6 +34,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.ComponentModel.DataAnnotations" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -47,6 +48,7 @@
     <Compile Include="Persist\Element.cs" />
     <Compile Include="Persist\PersistAttribute.cs" />
     <Compile Include="Persist\TreeSerializer.cs" />
+    <Compile Include="Persist\Utils.cs" />
     <Compile Include="Persist\XmlSerializer.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

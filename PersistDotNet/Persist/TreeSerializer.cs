@@ -60,10 +60,13 @@ namespace PersistDotNet.Persist
 
         public override void Write(Stream target, string name, object data)
         {
-            WriteMain(name, data);
-            ResolveWriteReferences();
-            WriteElement(target, m_root);
-            m_root = null;
+            lock (LockObject)
+            {
+                WriteMain(name, data);
+                ResolveWriteReferences();
+                WriteElement(target, m_root);
+                m_root = null;
+            }
         }
         protected override void BeginWriteObject(string name)
         {
@@ -100,24 +103,25 @@ namespace PersistDotNet.Persist
 
         public override object Read(Stream source, string name)
         {
-            var refencesStep = ParseElement(source);
-
-            m_root = new Element(refencesStep);
-
-            var result = ReadMain(name);
-
-            if (m_readReferences.Count > 0) //Resolve if there are pending references
+            lock (LockObject)
             {
-                m_root = refencesStep;
+                var refencesStep = ParseElement(source);
+                m_root = new Element(refencesStep);
 
-                ResolveMain(name, result);
+                var result = ReadMain(name);
+                if (m_readReferences.Count > 0) //Resolve if there are pending references
+                {
+                    m_root = refencesStep;
 
-                m_readReferences.Clear();
+                    ResolveMain(name, result);
+
+                    m_readReferences.Clear();
+                }
+
+                m_root = null;
+
+                return result;
             }
-
-            m_root = null;
-
-            return result;
         }
         protected override bool BeginReadObject(string name)
         {

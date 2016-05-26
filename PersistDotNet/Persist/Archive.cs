@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -17,6 +18,7 @@ namespace PersistDotNet.Persist
             Dictionary,
             Convertible,
         }
+
         private class PersistMember
         {
             public string Name { get; set; }
@@ -64,6 +66,10 @@ namespace PersistDotNet.Persist
                 };
             }
 
+            public override string ToString()
+            {
+                return $"Name: {Name} \t Type:{Type}";
+            }
             public static Type GetMemberType(MemberInfo info)
             {
                 PropertyInfo prp = info as PropertyInfo;
@@ -93,12 +99,21 @@ namespace PersistDotNet.Persist
         private ObjectIDGenerator m_generator;
         private readonly PersistMember m_mainInfo;
         private readonly Type[] m_polymorphicTypes;
+        private readonly Dictionary<Type,Type> m_metaTypes;
+
+        protected object LockObject => m_mainInfo;
 
         //Initialization
         protected Archive(Type mainType, Type[] polymorphicTypes)
         {
             m_mainInfo = new PersistMember(mainType);
+
             m_polymorphicTypes = polymorphicTypes ?? new Type[0];
+
+            m_metaTypes = Assembly.GetAssembly(mainType)
+                                  .GetTypes()
+                                  .Where(type => System.Attribute.IsDefined(type,typeof(MetadataTypeAttribute)))
+                                  .ToDictionary(type => type.GetCustomAttribute<MetadataTypeAttribute>().MetadataClassType, type => type);
 
             if (m_mainInfo.PersistType != PersistType.Complex)
             {
@@ -107,16 +122,13 @@ namespace PersistDotNet.Persist
 
             var context = new Stack<PersistMember>(new[] {m_mainInfo});
             var definedMembers = new Dictionary<Type,List<PersistMember>>();
-            var uniqueTypes = new HashSet<Type>(new[] { m_mainInfo.Type });
 
             while (context.Count > 0)
             {
                 PersistMember current = context.Pop();
-           
+
                 foreach (var memberInfo in GetElegibleMembers(current.Type))
                 {
-                    bool circularReferenceDetected = false;
-
                     //Create childInfo & add it to its parent
                     PersistMember childInfo = new PersistMember(memberInfo.Member)
                     {
@@ -124,9 +136,6 @@ namespace PersistDotNet.Persist
                         IsReference = memberInfo.Attribute.IsReference
                     };
                     current.Children.Add(childInfo);
-
-                    //Detect for circular references
-                    circularReferenceDetected |= childInfo.IsReference == false && childInfo.PersistType == PersistType.Complex && !uniqueTypes.Add(childInfo.Type);
 
                     //Try to get its children or queue the creation of them
                     List<PersistMember> memberChildren;
@@ -150,15 +159,13 @@ namespace PersistDotNet.Persist
                     {
                         childInfo.IsReference = false;
 
-                        var valueType = childInfo.Type?.GetGenericArguments()[0];
+                        var valueType = childInfo.Type?.GetEnumeratedType();
                         var valueItemInfo = new PersistMember(valueType)
                         {
                             IsReference = memberInfo.Attribute.IsReference,
                             Name = memberInfo.Attribute.ChildName ?? (valueType.IsGenericType ? ItemKwd : valueType.Name),
                         };
                         childInfo.ValueItemInfo = valueItemInfo;
-
-                        circularReferenceDetected |= valueItemInfo.IsReference == false && valueItemInfo.PersistType == PersistType.Complex && !uniqueTypes.Add(valueItemInfo.Type);
 
                         List<PersistMember> typeMembers;
                         if (definedMembers.TryGetValue(valueType, out typeMembers))
@@ -190,9 +197,6 @@ namespace PersistDotNet.Persist
                             Name = memberInfo.Attribute.ValueName ?? (valueType.IsGenericType ? ValueKwd : valueType.Name),
                         };
 
-                        circularReferenceDetected |= keyItemInfo.IsReference == false && keyItemInfo.PersistType == PersistType.Complex && !uniqueTypes.Add(keyItemInfo.Type);
-                        circularReferenceDetected |= valueItemInfo.IsReference == false && valueItemInfo.PersistType == PersistType.Complex && !uniqueTypes.Add(valueItemInfo.Type);
-
                         childInfo.ChildName = memberInfo.Attribute.ChildName ?? ItemKwd;
                         childInfo.KeyItemInfo = keyItemInfo;
                         childInfo.ValueItemInfo = valueItemInfo;
@@ -218,12 +222,12 @@ namespace PersistDotNet.Persist
                             definedMembers.Add(keyType, keyItemInfo.Children);
                         }
                     }
-
-                    if (circularReferenceDetected)
-                    {
-                        throw new SerializationException("could not initialize serializer because a circular dependency has been detected please use [Persist(IsReference = true)] to avoid this behaviour");
-                    }
                 }
+            }
+
+            if (Utils.HasCircularDependency(new[] {m_mainInfo}, member => member.Children.Where(m => !m.IsReference)))
+            {
+                throw new SerializationException("Could not initialize serializer because a circular dependency has been detected please use [Persist(IsReference = true)] to avoid this behaviour");
             }
         }
         
@@ -528,13 +532,28 @@ namespace PersistDotNet.Persist
 
             foreach (var memberType in new[] {mainType}.Concat(allDerivedTypes))
             {
-                var searchFlags = memberType == mainType ? searchMode : searchMode | BindingFlags.DeclaredOnly;
+                var currentMemberType = memberType;
+
+                var searchFlags = currentMemberType == mainType ? searchMode : searchMode | BindingFlags.DeclaredOnly;
+
+                Type metaType;
+                bool isMetaType = m_metaTypes.TryGetValue(currentMemberType, out metaType);
+
+                var realFields = new FieldInfo[0];
+                var realProperties = new PropertyInfo[0];
+
+                if (isMetaType)
+                {
+                    realFields = currentMemberType.GetFields(searchFlags);
+                    realProperties = currentMemberType.GetProperties(searchFlags);
+
+                    currentMemberType = metaType;
+                }
 
                 var propertyMembers =
-                    memberType.GetProperties(searchFlags)
+                    currentMemberType.GetProperties(searchFlags)
                         .Select( info => new { p = info, attr = (PersistAttribute)System.Attribute.GetCustomAttribute(info, typeof (PersistAttribute)) })
-                        .Where(
-                            info =>
+                        .Where(  info =>
                             {
                                 return GetPersistType(PersistMember.GetMemberType(info.p)) == PersistType.Convertible
                                     ? info.p.SetMethod != null && info.p.SetMethod.IsPublic &&
@@ -543,13 +562,13 @@ namespace PersistDotNet.Persist
                                         ? info.attr == null || info.attr.Ignore == false
                                         : info.attr != null && info.attr.Ignore == false);
                             })
-                        .Select(info => new MemberAttrib(info.p, info.attr ?? new PersistAttribute(info.p.Name)));
+                        .Select(info => new MemberAttrib( isMetaType ? realProperties.Single(p => p.Name == info.p.Name) : info.p, info.attr ?? new PersistAttribute(info.p.Name)));
 
                 var fieldMembers =
-                    memberType.GetFields(searchFlags)
+                    currentMemberType.GetFields(searchFlags)
                         .Select(info =>new { f = info, attr = (PersistAttribute) System.Attribute.GetCustomAttribute(info, typeof (PersistAttribute)) })
                         .Where(info => info.attr != null && info.attr.Ignore == false)
-                        .Select(info => new MemberAttrib(info.f, info.attr));
+                        .Select(info => new MemberAttrib(isMetaType ? realFields.Single(p => p.Name == info.f.Name) : info.f, info.attr));
 
                 elegibleMembers = elegibleMembers.Concat(propertyMembers.Concat(fieldMembers));
             }
