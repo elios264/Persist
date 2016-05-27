@@ -101,19 +101,19 @@ namespace PersistDotNet.Persist
         }
 
 
-        public override object Read(Stream source, string name)
+        public override object Read(Stream source)
         {
             lock (LockObject)
             {
                 var refencesStep = ParseElement(source);
                 m_root = new Element(refencesStep);
 
-                var result = ReadMain(name);
+                var result = ReadMain();
                 if (m_readReferences.Count > 0) //Resolve if there are pending references
                 {
                     m_root = refencesStep;
 
-                    ResolveMain(name, result);
+                    ResolveMain(result);
 
                     m_readReferences.Clear();
                 }

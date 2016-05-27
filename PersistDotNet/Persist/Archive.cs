@@ -246,24 +246,21 @@ namespace PersistDotNet.Persist
 
             m_generator = null;
         }
-        protected object ReadMain(string name)
+        protected object ReadMain()
         {
-            m_mainInfo.Name = name;
-
             object result = null;
             Read(m_mainInfo,ref result);
 
             return result;
         }
-        protected void ResolveMain(string name, object obj)
+        protected void ResolveMain(object obj)
         {
-            m_mainInfo.Name = name;
             Resolve(m_mainInfo, obj);
         }
 
         //TreeSerializer & BinarySerializer methods
         public abstract void Write(Stream target, string name, object data);
-        public abstract object Read(Stream source, string name);
+        public abstract object Read(Stream source);
 
         protected abstract bool BeginReadObject(string name);
         protected abstract void BeginWriteObject(string name);
