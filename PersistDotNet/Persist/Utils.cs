@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace PersistDotNet.Persist
 {
-    public static class Utils
+    internal static class Utils
     {
         public static Type GetEnumeratedType(this Type type)
         {

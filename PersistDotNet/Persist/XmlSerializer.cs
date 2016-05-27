@@ -5,7 +5,7 @@ using System.Xml;
 
 namespace PersistDotNet.Persist
 {
-    public class XmlSerializer : TreeSerializer
+    public sealed class XmlSerializer : TreeSerializer
     {
         public XmlSerializer(Type type, Type[] polymorphicTypes = null) : base(type, polymorphicTypes)
         {

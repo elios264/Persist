@@ -255,11 +255,10 @@ namespace PersistDotNet.Persist
 
             return result;
         }
-        protected object ResolveMain(string name, object obj)
+        protected void ResolveMain(string name, object obj)
         {
             m_mainInfo.Name = name;
             Resolve(m_mainInfo, obj);
-            return obj;
         }
 
         //TreeSerializer & BinarySerializer methods
