@@ -45,5 +45,50 @@ namespace PersistDotNet.Persist
 
             return false;
         }
+
+        public static bool AllSame<T,TOut>(this IEnumerable<T> enumerable, Func<T, TOut> selector,bool returnValueIfEmpty = false)
+        {
+            if (enumerable == null) throw new ArgumentNullException(nameof(enumerable));
+
+            var enumerator = enumerable.GetEnumerator();
+
+            TOut toCompare;
+            if (enumerator.MoveNext())
+                toCompare = selector(enumerator.Current);
+            else
+                return returnValueIfEmpty;
+
+            while (enumerator.MoveNext())
+            {
+                if (!toCompare.Equals(selector(enumerator.Current)))
+                    return false;
+            }
+
+            return true;
+        }
+
+        public static int CountSame<T, TOut>(this IEnumerable<T> enumerable, Func<T, TOut> selector)
+        {
+            if (enumerable == null) throw new ArgumentNullException(nameof(enumerable));
+
+            var enumerator = enumerable.GetEnumerator();
+
+            TOut toCompare;
+            if (enumerator.MoveNext())
+                toCompare = selector(enumerator.Current);
+            else
+                return 0;
+
+            var count = 1;
+
+            while (enumerator.MoveNext())
+            {
+                if (toCompare.Equals(selector(enumerator.Current)))
+                    count++;
+            }
+
+            return  count == 1 ? 0 : count;
+        }
+
     }
 }

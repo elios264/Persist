@@ -23,6 +23,12 @@ namespace PersistDotNet.Persist
                 set { m_realElement.Id = value; }
             }
 
+            public override bool IsArray
+            {
+                get { return m_realElement.IsArray; }
+                set { m_realElement.IsArray = value; }
+            }
+
             public override List<Attribute> Attributes
             {
                 get { return m_realElement.Attributes; }
@@ -103,15 +109,17 @@ namespace PersistDotNet.Persist
 
         public override object Read(Stream source)
         {
+            var firstStep = ParseElement(source);
+            var secondStep = new Element(firstStep);
+
             lock (LockObject)
             {
-                var refencesStep = ParseElement(source);
-                m_root = new Element(refencesStep);
+                m_root = firstStep;
 
                 var result = ReadMain();
                 if (m_readReferences.Count > 0) //Resolve if there are pending references
                 {
-                    m_root = refencesStep;
+                    m_root = secondStep;
 
                     ResolveMain(result);
 
@@ -137,7 +145,7 @@ namespace PersistDotNet.Persist
                 return true;
             }
 
-            var cur = Current.Elements.FirstOrDefault(element => element.Name == name);
+            var cur =  Current.IsArray ? Current.Elements.FirstOrDefault() : Current.Elements.FirstOrDefault(element => element.Name == name);
             if (cur != null)
             {
                 Current.Elements.Remove(cur);
@@ -187,7 +195,9 @@ namespace PersistDotNet.Persist
 
         protected override int GetObjectChildrenCount(string name)
         {
-            return Current.Elements.Count(e => e.Name == name);
+            return Current.IsArray 
+                ? Current.Elements.Count
+                : Current.Elements.Count(e => e.Name == name);
         }
 
         private void ResolveWriteReferences()

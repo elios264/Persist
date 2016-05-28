@@ -32,7 +32,7 @@ namespace PersistDotNet.Persist
             return mainElement;
         }
 
-        private static void ParseElement(XmlNode curNode, Element curElement)
+        internal static void ParseElement(XmlNode curNode, Element curElement)
         {
             curElement.Attributes.AddRange(curNode.Attributes.Cast<XmlAttribute>().Select(attribute => new Attribute(attribute.Name,attribute.Value)));
 
@@ -45,7 +45,7 @@ namespace PersistDotNet.Persist
             }
 
         }
-        private static void WriteElement(XmlDocument doc, XmlNode node, Element element)
+        internal static void WriteElement(XmlDocument doc, XmlNode node, Element element)
         {
             foreach (var attribute in element.Attributes)
             {
@@ -63,4 +63,5 @@ namespace PersistDotNet.Persist
             }
         }
     }
+
 }

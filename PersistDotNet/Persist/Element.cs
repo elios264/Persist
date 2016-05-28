@@ -8,6 +8,7 @@ namespace PersistDotNet.Persist
 
         public virtual string Name { get; }
         public virtual long Id { get; set; }
+        public virtual bool IsArray { get; set; }
 
         public virtual List<Attribute> Attributes { get; }
         public virtual List<Element> Elements { get; }
@@ -27,6 +28,10 @@ namespace PersistDotNet.Persist
             Elements = copyElement.Elements.Select(element => new Element(element)).ToList();
         }
 
+        public override string ToString()
+        {
+            return Name;
+        }
 
     }
 }
