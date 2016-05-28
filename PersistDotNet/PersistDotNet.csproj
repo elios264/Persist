@@ -7,9 +7,9 @@
     <ProjectGuid>{52A5CAA6-902E-4073-A956-AE35881269E2}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>PersistDotNet</RootNamespace>
-    <AssemblyName>PersistDotNet</AssemblyName>
-    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
+    <RootNamespace>elios.Persist</RootNamespace>
+    <AssemblyName>Persist</AssemblyName>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -32,6 +32,9 @@
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
+  <PropertyGroup>
+    <RunPostBuildEvent>OnOutputUpdated</RunPostBuildEvent>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="Newtonsoft.Json, Version=8.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <HintPath>..\packages\Newtonsoft.Json.8.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
@@ -51,26 +54,28 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Persist\Archive.cs" />
-    <Compile Include="Persist\Attribute.cs" />
-    <Compile Include="Persist\Element.cs" />
-    <Compile Include="Persist\JsonSerializer.cs" />
-    <Compile Include="Persist\PersistAttribute.cs" />
-    <Compile Include="Persist\TreeSerializer.cs" />
-    <Compile Include="Persist\Utils.cs" />
-    <Compile Include="Persist\XmlSerializer.cs" />
-    <Compile Include="Persist\YamlSerializer.cs" />
+    <Compile Include="Archive.cs" />
+    <Compile Include="Attribute.cs" />
+    <Compile Include="Element.cs" />
+    <Compile Include="JsonSerializer.cs" />
+    <Compile Include="PersistAttribute.cs" />
+    <Compile Include="TreeSerializer.cs" />
+    <Compile Include="Utils.cs" />
+    <Compile Include="XmlSerializer.cs" />
+    <Compile Include="YamlSerializer.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
+  <PropertyGroup>
+    <PostBuildEvent>
+    </PostBuildEvent>
+  </PropertyGroup>
+  <Target Name="AfterBuild" Condition=" '$(Configuration)' == 'Release'" >
+      <Exec Command="del *.nupkg"/>
+      <Exec Command="nuget pack PersistDotNet.csproj -Prop Configuration=Release"/>
+      <Exec Command="nuget push *.nupkg -s https://www.nuget.org"/>
   </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
 </Project>

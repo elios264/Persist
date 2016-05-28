@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Xml;
 
-namespace PersistDotNet.Persist
+namespace elios.Persist
 {
     public sealed class XmlSerializer : TreeSerializer
     {

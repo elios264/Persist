@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
 
-namespace PersistDotNet.Persist
+namespace elios.Persist
 {
     public sealed class JsonSerializer : TreeSerializer
     {

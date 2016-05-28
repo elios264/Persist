@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
 
-namespace PersistDotNet.Persist
+namespace elios.Persist
 {
 
     public abstract class TreeSerializer : Archive
@@ -23,10 +23,10 @@ namespace PersistDotNet.Persist
                 set { m_realElement.Id = value; }
             }
 
-            public override bool IsArray
+            public override bool IsContainer
             {
-                get { return m_realElement.IsArray; }
-                set { m_realElement.IsArray = value; }
+                get { return m_realElement.IsContainer; }
+                set { m_realElement.IsContainer = value; }
             }
 
             public override List<Attribute> Attributes
@@ -64,26 +64,26 @@ namespace PersistDotNet.Persist
         protected abstract void WriteElement(Stream target, Element root);
         protected abstract Element ParseElement(Stream source);
 
-        public override void Write(Stream target, string name, object data)
+        public override void Write(Stream target, object data)
         {
             lock (LockObject)
             {
-                WriteMain(name, data);
+                WriteMain(data);
                 ResolveWriteReferences();
                 WriteElement(target, m_root);
                 m_root = null;
             }
         }
-        protected override void BeginWriteObject(string name)
+        protected override void BeginWriteObject(string name, bool isContainer = false)
         {
             if (m_context.Count == 0)
             {
-                m_root = new Element(name);
+                m_root = new Element(name) { IsContainer = isContainer};
                 m_context.Push(m_root);
             }
             else if (!string.IsNullOrEmpty(name))
             {
-                var element = new Element(name);
+                var element = new Element(name) { IsContainer = isContainer};
                 Current.Elements.Add(element);
                 m_context.Push(element);
             }
@@ -145,7 +145,7 @@ namespace PersistDotNet.Persist
                 return true;
             }
 
-            var cur =  Current.IsArray ? Current.Elements.FirstOrDefault() : Current.Elements.FirstOrDefault(element => element.Name == name);
+            var cur =  Current.IsContainer ? Current.Elements.FirstOrDefault() : Current.Elements.FirstOrDefault(element => element.Name == name);
             if (cur != null)
             {
                 Current.Elements.Remove(cur);
@@ -195,7 +195,7 @@ namespace PersistDotNet.Persist
 
         protected override int GetObjectChildrenCount(string name)
         {
-            return Current.IsArray 
+            return Current.IsContainer 
                 ? Current.Elements.Count
                 : Current.Elements.Count(e => e.Name == name);
         }

@@ -49,13 +49,13 @@
     <Compile Include="SampleTypes.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="app.config" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\PersistDotNet\PersistDotNet.csproj">
       <Project>{52a5caa6-902e-4073-a956-ae35881269e2}</Project>
       <Name>PersistDotNet</Name>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="app.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

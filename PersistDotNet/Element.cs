@@ -1,14 +1,15 @@
 ﻿using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
-namespace PersistDotNet.Persist
+namespace elios.Persist
 {
     public class Element
     {
 
         public virtual string Name { get; }
         public virtual long Id { get; set; }
-        public virtual bool IsArray { get; set; }
+        public virtual bool IsContainer { get; set; }
 
         public virtual List<Attribute> Attributes { get; }
         public virtual List<Element> Elements { get; }
@@ -21,9 +22,11 @@ namespace PersistDotNet.Persist
             Elements = new List<Element>();
         }
 
+        [SuppressMessage("ReSharper", "VirtualMemberCallInConstructor")]
         public Element(Element copyElement)
         {
             Name = copyElement.Name;
+            IsContainer = copyElement.IsContainer;
             Attributes = copyElement.Attributes.ToList();
             Elements = copyElement.Elements.Select(element => new Element(element)).ToList();
         }

@@ -1,6 +1,6 @@
 using System;
 
-namespace PersistDotNet.Persist
+namespace elios.Persist
 {
     [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
     public class PersistAttribute : System.Attribute

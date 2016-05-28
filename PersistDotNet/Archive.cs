@@ -7,7 +7,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization;
 
-namespace PersistDotNet.Persist
+namespace elios.Persist
 {
     public abstract class Archive
     {
@@ -232,7 +232,7 @@ namespace PersistDotNet.Persist
         }
         
         //Methods called by TreeSerializer & BinarySerializer
-        protected void WriteMain(string name, object data)
+        protected void WriteMain(object data)
         {
             if (!m_mainInfo.Type.IsInstanceOfType(data))
             {
@@ -241,7 +241,7 @@ namespace PersistDotNet.Persist
 
             m_generator = new ObjectIDGenerator();
 
-            m_mainInfo.Name = name;
+            m_mainInfo.Name = data.GetType().Name;
             Write(m_mainInfo, data);
 
             m_generator = null;
@@ -259,11 +259,11 @@ namespace PersistDotNet.Persist
         }
 
         //TreeSerializer & BinarySerializer methods
-        public abstract void Write(Stream target, string name, object data);
+        public abstract void Write(Stream target, object data);
         public abstract object Read(Stream source);
 
         protected abstract bool BeginReadObject(string name);
-        protected abstract void BeginWriteObject(string name);
+        protected abstract void BeginWriteObject(string name,bool isContainer = false);
 
         protected abstract void EndReadObject(object obj);
         protected abstract void EndWriteObject(long id);
@@ -451,7 +451,7 @@ namespace PersistDotNet.Persist
                     WriteValue(persistInfo.Name, persistValue);
                     break;
                 case PersistType.List:
-                    BeginWriteObject(persistInfo.Name);
+                    BeginWriteObject(persistInfo.Name,true);
 
                     foreach (var subItem in (IList) persistValue)
                     {
@@ -468,9 +468,7 @@ namespace PersistDotNet.Persist
                             EndWriteObject(-1);
                         }
                         else
-                        {
                             Write(persistInfo.ValueItemInfo, subItem);
-                        }
                     }
 
                     EndWriteObject(UidOf(persistValue));

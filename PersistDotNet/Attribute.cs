@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace PersistDotNet.Persist
+namespace elios.Persist
 {
     public class Attribute
     {
@@ -12,6 +12,11 @@ namespace PersistDotNet.Persist
         {
             Name = name;
             Value = value.ToString(CultureInfo.InvariantCulture);
+        }
+
+        public override string ToString()
+        {
+            return $"Name: {Name}, Value: {Value}";
         }
     }
 }

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using YamlDotNet.RepresentationModel;
 
-namespace PersistDotNet.Persist
+namespace elios.Persist
 {
     public sealed class YamlSerializer : TreeSerializer
     {
@@ -61,7 +61,7 @@ namespace PersistDotNet.Persist
             }
             else
             {
-                curElement.IsArray = true;
+                curElement.IsContainer = true;
 
                 foreach (var node in ((YamlSequenceNode)curNode).Children)
                 {
@@ -86,21 +86,26 @@ namespace PersistDotNet.Persist
             {
                 YamlNode childNode;
 
-                if (e.Elements.AllSame(_ => _.Name))
+                if (e.IsContainer)
                 {
                     childNode = new YamlSequenceNode();
                     WriteElement(childNode, e);
                 }
-                else if (e.Elements.CountSame(_ => _.Name) == 0)
+                else
                 {
                     childNode = new YamlMappingNode();
                     WriteElement(childNode, e);
                 }
-                else
-                    throw new InvalidOperationException("YamlSerializer/JsonSerializer cannot serialize an anonymous containers aka [Persist(\"\")]");
 
                 if (node is YamlMappingNode)
-                    ((YamlMappingNode)node).Children.Add(new YamlScalarNode(e.Name), childNode);
+                {
+                    var mNode = ((YamlMappingNode)node);
+
+                    if (mNode.Children.ContainsKey(new YamlScalarNode(e.Name)))
+                        throw new InvalidOperationException("YamlSerializer/JsonSerializer cannot serialize anonymous containers aka [Persist(\"\")]");
+                    else
+                        mNode.Add(new YamlScalarNode(e.Name), childNode);
+                }
                 else
                     ((YamlSequenceNode)node).Add(childNode);
             }

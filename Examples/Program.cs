@@ -1,35 +1,35 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using PersistDotNet.Persist;
+﻿using System.IO;
+using elios.Persist;
 
 namespace Examples
 {
     class Program
     {
+        private const string FileName1 = "classroom.xml";
+        private const string FileName2 = "automata.xml";
+
         static void Main(string[] args)
         {
-            XmlSerializer classroomSerializer = new XmlSerializer(typeof(Classroom));
 
-            using (var writeStream = new FileStream("classroom.xml", FileMode.Create))
-                classroomSerializer.Write(writeStream, "Classroom", Classroom.SampleClassroom());
+            var classroomSerializer = new XmlSerializer(typeof(Classroom));
 
-            using (var readStream = new FileStream("classroom.xml", FileMode.Open))
+            using (var writeStream = new FileStream(FileName1, FileMode.Create))
+                classroomSerializer.Write(writeStream, Classroom.SampleClassroom());
+
+            using (var readStream = new FileStream(FileName1, FileMode.Open))
             {
-                Classroom newClassroom = (Classroom)classroomSerializer.Read(readStream, "Classroom");
+                Classroom newClassroom = (Classroom)classroomSerializer.Read(readStream);
             }
 
-            XmlSerializer automataSerializer = new XmlSerializer(typeof (Automata), new[] {typeof (CommandTransition), typeof (ConditionTransition)});
+            var automataSerializer = new XmlSerializer(typeof (Automata), new[] {typeof (CommandTransition), typeof (ConditionTransition)});
 
 
-            using (var writeStream = new FileStream("automata.xml", FileMode.Create))
-                automataSerializer.Write(writeStream, "automata", Automata.SampleAutomata());
+            using (var writeStream = new FileStream(FileName2, FileMode.Create))
+                automataSerializer.Write(writeStream, Automata.SampleAutomata());
 
-            using (var readStream = new FileStream("automata.xml", FileMode.Open))
+            using (var readStream = new FileStream(FileName2, FileMode.Open))
             {
-                Automata newAutomata = (Automata)automataSerializer.Read(readStream, "automata");
+                Automata newAutomata = (Automata)automataSerializer.Read(readStream);
             }
 
         }
