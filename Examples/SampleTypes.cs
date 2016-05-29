@@ -104,7 +104,7 @@ namespace Examples
                     new CommandTransition {Name = "Command1", Command = 5456},
                     new ConditionTransition {Name = "Cond1", Condition = "is_falling" },
                     new CommandTransition {Name = "Command2", Command = 22},
-                    new CommandTransition {Name = "Command3", Command = 533},
+                    new CommandTransition {Name = "Command3", Command = 533}
                 }
             });
 
@@ -114,7 +114,7 @@ namespace Examples
                 Transitions = new List<Transition>
                 {
                     new ConditionTransition {Name = "Cond3", Condition = "is_high" },
-                    new ConditionTransition {Name = "Cond4", Condition = "is_drunk" },
+                    new ConditionTransition {Name = "Cond4", Condition = "is_drunk" }
                 }
             });
 
@@ -124,7 +124,7 @@ namespace Examples
                 Transitions = new List<Transition>
                 {
                     new CommandTransition {Name = "Command1", Command = 22},
-                    new ConditionTransition {Name = "Intoxicate", Condition = "is_still_drinking" },
+                    new ConditionTransition {Name = "Intoxicate", Condition = "is_still_drinking" }
                 }
             });
 
@@ -133,7 +133,7 @@ namespace Examples
                 Name = "Intoxicated",
                 Transitions = new List<Transition>
                 {
-                    new ConditionTransition {Name = "Cond1", Condition = "is_falling" },
+                    new ConditionTransition {Name = "Cond1", Condition = "is_falling" }
                 }
             });
 

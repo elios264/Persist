@@ -1,12 +1,12 @@
-﻿using System.Resources;
-using System.Reflection;
+﻿using System.Reflection;
+using System.Resources;
 using System.Runtime.InteropServices;
 
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("Persist  Xml, Json &amp; Yaml Serialization Library")]
-[assembly: AssemblyDescription("Persist is a .Net library that serializes data to and from streams in XML/Json/Yam formats")]
+[assembly: AssemblyTitle("Persist .Net: Xml, Json &amp; Yaml Serialization Library")]
+[assembly: AssemblyDescription("Persist is a .Net serializer/deserializer supporting  XML/Json/Yam formats")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("elios")]
 [assembly: AssemblyProduct("Persist")]

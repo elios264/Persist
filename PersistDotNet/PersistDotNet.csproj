@@ -55,27 +55,31 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Archive.cs" />
-    <Compile Include="Attribute.cs" />
-    <Compile Include="Element.cs" />
-    <Compile Include="JsonSerializer.cs" />
+    <Compile Include="NodeAttribute.cs" />
+    <Compile Include="Node.cs" />
+    <Compile Include="JsonArchive.cs" />
     <Compile Include="PersistAttribute.cs" />
-    <Compile Include="TreeSerializer.cs" />
+    <Compile Include="ArchiveUtils.cs" />
+    <Compile Include="TreeArchive.cs" />
     <Compile Include="Utils.cs" />
-    <Compile Include="XmlSerializer.cs" />
-    <Compile Include="YamlSerializer.cs" />
+    <Compile Include="XmlArchive.cs" />
+    <Compile Include="YamlArchive.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="readme.txt" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>
     </PostBuildEvent>
   </PropertyGroup>
-  <Target Name="AfterBuild" Condition=" '$(Configuration)' == 'Release'" >
-      <Exec Command="del *.nupkg"/>
-      <Exec Command="nuget pack PersistDotNet.csproj -Prop Configuration=Release"/>
-      <Exec Command="nuget push *.nupkg -s https://www.nuget.org"/>
+  <Target Name="AfterBuild" Condition=" '$(Configuration)' == 'Release'">
+    <Exec Command="del *.nupkg" />
+    <Exec Command="nuget pack PersistDotNet.csproj -Symbols -Prop Configuration=Release" />
+    <Exec Command="nuget push *.nupkg -s https://www.nuget.org" />
   </Target>
 </Project>

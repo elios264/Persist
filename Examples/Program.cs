@@ -1,5 +1,4 @@
-﻿using System.IO;
-using elios.Persist;
+﻿using elios.Persist;
 
 namespace Examples
 {
@@ -10,28 +9,14 @@ namespace Examples
 
         static void Main(string[] args)
         {
+            ArchiveUtils.Write(FileName1,Classroom.SampleClassroom());
 
-            var classroomSerializer = new XmlSerializer(typeof(Classroom));
+            var newClassroom = ArchiveUtils.Read<Classroom>(FileName1);
 
-            using (var writeStream = new FileStream(FileName1, FileMode.Create))
-                classroomSerializer.Write(writeStream, Classroom.SampleClassroom());
+            var xmlArchive = new XmlArchive(typeof(Automata), new[] {typeof(CommandTransition), typeof(ConditionTransition)});
 
-            using (var readStream = new FileStream(FileName1, FileMode.Open))
-            {
-                Classroom newClassroom = (Classroom)classroomSerializer.Read(readStream);
-            }
-
-            var automataSerializer = new XmlSerializer(typeof (Automata), new[] {typeof (CommandTransition), typeof (ConditionTransition)});
-
-
-            using (var writeStream = new FileStream(FileName2, FileMode.Create))
-                automataSerializer.Write(writeStream, Automata.SampleAutomata());
-
-            using (var readStream = new FileStream(FileName2, FileMode.Open))
-            {
-                Automata newAutomata = (Automata)automataSerializer.Read(readStream);
-            }
-
+            xmlArchive.Write(FileName2, Automata.SampleAutomata());
+            var newAutomata = xmlArchive.Read(FileName2);
         }
     }
 }

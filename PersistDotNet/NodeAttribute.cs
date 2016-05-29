@@ -3,12 +3,12 @@ using System.Globalization;
 
 namespace elios.Persist
 {
-    public class Attribute
+    public class NodeAttribute
     {
         public string Name { get; }
         public string Value { get; }
 
-        public Attribute(string name, IConvertible value)
+        public NodeAttribute(string name, IConvertible value)
         {
             Name = name;
             Value = value.ToString(CultureInfo.InvariantCulture);
@@ -16,7 +16,7 @@ namespace elios.Persist
 
         public override string ToString()
         {
-            return $"Name: {Name}, Value: {Value}";
+            return $"{Name}, {Value}";
         }
     }
 }

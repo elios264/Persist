@@ -13,4 +13,7 @@
     <copyright>Copyright 2016</copyright>
     <tags>Xml Json Yaml Serialization Serializer XmlSerializer Persist</tags>
   </metadata>
+  <files>
+    <file src="readme.txt" target="" />
+  </files>  
 </package>

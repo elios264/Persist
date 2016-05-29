@@ -3,7 +3,7 @@ using System;
 namespace elios.Persist
 {
     [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-    public class PersistAttribute : System.Attribute
+    public class PersistAttribute : Attribute
     {
         /// <summary>
         /// name of the member, if not set the property or field name will be used

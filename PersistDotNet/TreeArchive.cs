@@ -7,89 +7,95 @@ using System.Runtime.Serialization;
 namespace elios.Persist
 {
 
-    public abstract class TreeSerializer : Archive
+    public abstract class TreeArchive : Archive
     {
-        private class ParentElement : Element
+        private class ParentNode : Node
         {
-            private readonly Element m_realElement;
+            private readonly Node m_realNode;
 
             public override string Name
             {
-                get { return m_realElement.Name; }
+                get { return m_realNode.Name; }
             }
-            public override long Id
+            internal override long Id
             {
-                get { return m_realElement.Id; }
-                set { m_realElement.Id = value; }
+                get { return m_realNode.Id; }
+                set { m_realNode.Id = value; }
             }
 
             public override bool IsContainer
             {
-                get { return m_realElement.IsContainer; }
-                set { m_realElement.IsContainer = value; }
+                get { return m_realNode.IsContainer; }
+                set { m_realNode.IsContainer = value; }
             }
 
-            public override List<Attribute> Attributes
+            public override List<NodeAttribute> Attributes
             {
-                get { return m_realElement.Attributes; }
+                get { return m_realNode.Attributes; }
             }
-            public override List<Element> Elements
+            public override List<Node> Nodes
             {
-                get { return m_realElement.Elements; }
+                get { return m_realNode.Nodes; }
             }
 
-            public ParentElement(Element realElement) : base(string.Empty)
+            public ParentNode(Node realNode) : base(string.Empty)
             {
-                m_realElement = realElement;
+                m_realNode = realNode;
             }
         }
 
-        private Element m_root;
-        private readonly Stack<Element> m_context;
+        private Node m_root;
+        private readonly Stack<Node> m_context;
         private readonly HashSet<long> m_writeReferences;
         private readonly Dictionary<string, object> m_readReferences;
 
-        private Element Current
+        private Node Current
         {
             get { return m_context.Peek(); }
         }
 
-        protected TreeSerializer(Type type, Type[] polymorphicTypes) : base(type, polymorphicTypes)
+        protected TreeArchive(Type type, Type[] polymorphicTypes) : base(type, polymorphicTypes)
         {
-            m_context = new Stack<Element>();
+            m_context = new Stack<Node>();
             m_writeReferences = new HashSet<long>();
             m_readReferences = new Dictionary<string, object>();
         }
 
-        protected abstract void WriteElement(Stream target, Element root);
-        protected abstract Element ParseElement(Stream source);
+        protected abstract void WriteNode(Stream target, Node root);
+        protected abstract Node ParseNode(Stream source);
 
-        public override void Write(Stream target, object data)
+        public override void Write(Stream target, object data, string rootName = null)
         {
-            lock (LockObject)
+            lock (this)
             {
-                WriteMain(data);
+                WriteMain(data, rootName);
                 ResolveWriteReferences();
-                WriteElement(target, m_root);
+                WriteNode(target, m_root);
                 m_root = null;
             }
         }
+        public override void Write(string target, object data, string rootName = null)
+        {
+            using (var writeStream = new FileStream(target, FileMode.Create))
+                Write(writeStream,data,rootName);
+        }
+
         protected override void BeginWriteObject(string name, bool isContainer = false)
         {
             if (m_context.Count == 0)
             {
-                m_root = new Element(name) { IsContainer = isContainer};
+                m_root = new Node(name) { IsContainer = isContainer};
                 m_context.Push(m_root);
             }
             else if (!string.IsNullOrEmpty(name))
             {
-                var element = new Element(name) { IsContainer = isContainer};
-                Current.Elements.Add(element);
+                var element = new Node(name) { IsContainer = isContainer};
+                Current.Nodes.Add(element);
                 m_context.Push(element);
             }
             else
             {
-                m_context.Push(new ParentElement(Current));
+                m_context.Push(new ParentNode(Current));
             }
         }
         protected override void EndWriteObject(long id)
@@ -98,21 +104,21 @@ namespace elios.Persist
         }
         protected override void WriteReference(string name, long id)
         {
-            Current.Attributes.Add(new Attribute(name, id));
+            Current.Attributes.Add(new NodeAttribute(name, id));
             m_writeReferences.Add(id);
         }
         protected override void WriteValue(string name, object data)
         {
-            Current.Attributes.Add(new Attribute(name,(IConvertible)data));
+            Current.Attributes.Add(new NodeAttribute(name,(IConvertible)data));
         }
 
 
         public override object Read(Stream source)
         {
-            var firstStep = ParseElement(source);
-            var secondStep = new Element(firstStep);
+            var firstStep = ParseNode(source);
+            var secondStep = new Node(firstStep);
 
-            lock (LockObject)
+            lock (this)
             {
                 m_root = firstStep;
 
@@ -131,6 +137,12 @@ namespace elios.Persist
                 return result;
             }
         }
+        public override object Read(string source)
+        {
+            using (var readStream = new FileStream(source, FileMode.Open))
+                return Read(readStream);
+        }
+
         protected override bool BeginReadObject(string name)
         {
             if (m_context.Count == 0)
@@ -141,14 +153,14 @@ namespace elios.Persist
 
             if (string.IsNullOrEmpty(name))
             {
-                m_context.Push(new ParentElement(Current));
+                m_context.Push(new ParentNode(Current));
                 return true;
             }
 
-            var cur =  Current.IsContainer ? Current.Elements.FirstOrDefault() : Current.Elements.FirstOrDefault(element => element.Name == name);
+            var cur =  Current.IsContainer ? Current.Nodes.FirstOrDefault() : Current.Nodes.FirstOrDefault(element => element.Name == name);
             if (cur != null)
             {
-                Current.Elements.Remove(cur);
+                Current.Nodes.Remove(cur);
                 m_context.Push(cur);
                 return true;
             }
@@ -159,7 +171,7 @@ namespace elios.Persist
         {
             var objId = Current.Attributes.FirstOrDefault(attr => attr.Name == AddressKwd)?.Value;
 
-            if (!(Current is ParentElement) &&  value!= null && objId != null)
+            if (!(Current is ParentNode) &&  value!= null && objId != null)
             {
                 m_readReferences.Add(objId,value);
             }
@@ -196,8 +208,8 @@ namespace elios.Persist
         protected override int GetObjectChildrenCount(string name)
         {
             return Current.IsContainer 
-                ? Current.Elements.Count
-                : Current.Elements.Count(e => e.Name == name);
+                ? Current.Nodes.Count
+                : Current.Nodes.Count(e => e.Name == name);
         }
 
         private void ResolveWriteReferences()
@@ -209,15 +221,15 @@ namespace elios.Persist
 
             while (m_context.Count > 0)
             {
-                Element e = m_context.Pop();
+                Node e = m_context.Pop();
 
                 if (e.Id > 0 && m_writeReferences.Contains(e.Id))
                 {
-                    e.Attributes.Add(new Attribute(AddressKwd, e.Id));
+                    e.Attributes.Add(new NodeAttribute(AddressKwd, e.Id));
                     m_writeReferences.Remove(e.Id);
                 }
 
-                foreach (var element in e.Elements)
+                foreach (var element in e.Nodes)
                 {
                     m_context.Push(element);
                 }

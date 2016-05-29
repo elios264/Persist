@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Xml;
 
 namespace elios.Persist
 {
@@ -45,5 +48,55 @@ namespace elios.Persist
 
             return false;
         }
+
+        public static bool IsAnonymousType(this Type type)
+        {
+            if (type == null)
+                throw new ArgumentNullException(nameof(type));
+
+            // HACK: The only way to detect anonymous types right now.
+            return type.GetTypeInfo().IsGenericType
+                   && (type.GetTypeInfo().Attributes & TypeAttributes.NotPublic) == TypeAttributes.NotPublic
+                   && (type.Name.StartsWith("<>", StringComparison.OrdinalIgnoreCase) || type.Name.StartsWith("VB$", StringComparison.OrdinalIgnoreCase))
+                   && (type.Name.Contains("AnonymousType") || type.Name.Contains("AnonType"))
+                   && type.GetTypeInfo().GetCustomAttributes(typeof(CompilerGeneratedAttribute)).Any();
+        }
+
+        public static void RemoveAllAttributes(this XmlDocument xmlDocument)
+        {
+            if (xmlDocument == null || !xmlDocument.HasChildNodes) return;
+
+            foreach (var xmlElement in xmlDocument.SelectNodes(".//*").Cast<XmlElement>().Where(xmlElement => xmlElement.HasAttributes))
+                xmlElement.Attributes.RemoveAll();
+        }
+
+        public static void ElementifyAllAttributes(this XmlDocument xmlDocument)
+        {
+            if (xmlDocument == null || !xmlDocument.HasChildNodes) return;
+
+            foreach (var xmlElement in xmlDocument.SelectNodes(".//*").Cast<XmlElement>().Where(xmlElement => xmlElement.HasAttributes))
+            {
+                foreach (XmlAttribute xmlAttribute in xmlElement.Attributes)
+                    xmlElement.AppendChild(xmlDocument.CreateElement(xmlAttribute.Name)).InnerText = xmlAttribute.Value;
+
+                xmlElement.Attributes.RemoveAll();
+            }
+        }
+
+        public class OnDispose : IDisposable
+        {
+            private readonly Action m_act;
+
+            public OnDispose(Action act)
+            {
+                m_act = act;
+            }
+
+            public void Dispose()
+            {
+                m_act();
+            }
+        }
+
     }
 }
