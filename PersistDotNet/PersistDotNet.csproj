@@ -83,6 +83,7 @@
   </PropertyGroup>
   <Target Name="AfterBuild" Condition=" '$(Configuration)' == 'Release'">
     <Exec Command="del *.nupkg" />
+    <Exec Command="copy ..\README.txt readme.txt /Y" />
     <Exec Command="nuget pack PersistDotNet.csproj -Prop Configuration=Release" />
     <Exec Command="nuget push *.nupkg -s https://www.nuget.org" />
   </Target>

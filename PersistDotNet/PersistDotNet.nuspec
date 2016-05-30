@@ -15,6 +15,6 @@
     <tags>Xml Json Yaml Serialization Serializer XmlSerializer Persist</tags>
   </metadata>
   <files>
-    <file src="../REAMDE.txt" target="" />
+    <file src="readme.txt" target="" />
   </files>  
 </package>
