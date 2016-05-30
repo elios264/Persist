@@ -7,13 +7,14 @@
     <authors>$author$</authors>
     <owners>$author$</owners>
     <projectUrl>https://github.com/elios264/Pakal_PersistDotNet</projectUrl>
-    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <licenseUrl>https://raw.githubusercontent.com/elios264/Pakal_PersistDotNet/master/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <description>$description$</description>
     <releaseNotes>First release, check documentation at https://github.com/elios264/Pakal_PersistDotNet</releaseNotes>
     <copyright>Copyright 2016</copyright>
     <tags>Xml Json Yaml Serialization Serializer XmlSerializer Persist</tags>
   </metadata>
   <files>
-    <file src="readme.txt" target="" />
+    <file src="../REAMDE.txt" target="" />
   </files>  
 </package>

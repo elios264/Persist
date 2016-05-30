@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("Persist .Net: Xml, Json &amp; Yaml Serialization Library")]
-[assembly: AssemblyDescription("Persist is a .Net serializer/deserializer supporting  XML/Json/Yam formats")]
+[assembly: AssemblyDescription("Persist is a .Net serializer/deserializer supporting  XML/Json/Yaml formats")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("elios")]
 [assembly: AssemblyProduct("Persist")]
@@ -32,7 +32,7 @@ using System.Runtime.InteropServices;
 // You can specify all the values or you can default the Build and Revision Numbers 
 // by using the '*' as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("1.0.0.*")]
+[assembly: AssemblyVersion("1.0.0.26080")]
 [assembly: AssemblyFileVersion("1.0.0.0")]
 [assembly: NeutralResourcesLanguage("en-US")]
 

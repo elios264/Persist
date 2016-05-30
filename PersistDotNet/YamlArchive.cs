@@ -7,21 +7,53 @@ using YamlDotNet.RepresentationModel;
 namespace elios.Persist
 {
 
+    /// <summary>
+    /// Yaml Serializer
+    /// </summary>
+    /// <seealso cref="elios.Persist.TreeArchive" />
     public sealed class YamlArchive : TreeArchive
     {
+        /// <summary>
+        /// Initializes <see cref="YamlArchive"/> that reads archives of the specified type
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="polymorphicTypes"></param>
         public YamlArchive(Type type, Type[] polymorphicTypes = null) : base(type, polymorphicTypes)
         {
         }
+        /// <summary>
+        /// Initializes a new instance of the <see cref="YamlArchive"/> class.
+        /// </summary>
+        /// <param name="archive">The archive.</param>
+        public YamlArchive(Archive archive) : base(archive)
+        {
+        }
 
+
+        /// <summary>
+        /// Writes a node to the <see cref="Stream" />
+        /// </summary>
+        /// <param name="target"></param>
+        /// <param name="root"></param>
         protected override void WriteNode(Stream target, Node root)
         {
             SaveNode(target, root);
         }
+        /// <summary>
+        /// Parses a node form the <see cref="Stream" />
+        /// </summary>
+        /// <param name="source"></param>
+        /// <returns></returns>
         protected override Node ParseNode(Stream source)
         {
             return LoadNode(source);
         }
 
+        /// <summary>
+        /// Parses a node from a yaml <see cref="Stream"/>
+        /// </summary>
+        /// <param name="source">The source.</param>
+        /// <returns></returns>
         public static Node LoadNode(Stream source)
         {
             YamlDocument doc;
@@ -40,6 +72,12 @@ namespace elios.Persist
 
             return mainNode;
         }
+
+        /// <summary>
+        /// writes a <see cref="Node"/> to a yaml stream
+        /// </summary>
+        /// <param name="target">The target.</param>
+        /// <param name="node">The node.</param>
         public static void SaveNode(Stream target, Node node)
         {
             YamlDocument doc = new YamlDocument(new YamlMappingNode());

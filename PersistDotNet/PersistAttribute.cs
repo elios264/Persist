@@ -2,6 +2,9 @@ using System;
 
 namespace elios.Persist
 {
+    /// <summary>
+    /// Preferences used to personalize an object serialization and deserialization members
+    /// </summary>
     [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
     public class PersistAttribute : Attribute
     {
@@ -32,9 +35,24 @@ namespace elios.Persist
         /// </summary>
         public bool Ignore { get; set; }
 
+        /// <summary>
+        /// Gets or sets a value indicating whether to use the parameterless constructor of the type. default value is true
+        /// </summary>
+        /// <value>
+        ///  if true <see cref="T:Activator.CreateInstance"/>  will be used otherwise <see cref="T:FormatterServices.GetUninitializedObject"/>
+        /// </value>
+        public bool RunConstructor { get; set; } = true;
+
+        /// <summary>
+        /// Default constructor
+        /// </summary>
         public PersistAttribute()
         {
         }
+        /// <summary>
+        /// Creates a persist attribute with the specified name
+        /// </summary>
+        /// <param name="name"></param>
         public PersistAttribute(string name)
         {
             Name = name;

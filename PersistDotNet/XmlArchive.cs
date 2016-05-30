@@ -6,21 +6,52 @@ using System.Xml;
 namespace elios.Persist
 {
 
+    /// <summary>
+    /// Xml serializer
+    /// </summary>
+    /// <seealso cref="elios.Persist.TreeArchive" />
     public sealed class XmlArchive : TreeArchive
     {
+        /// <summary>
+        /// Initializes <see cref="XmlArchive"/> that reads archives of the specified type
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="polymorphicTypes"></param>
         public XmlArchive(Type type, Type[] polymorphicTypes = null) : base(type, polymorphicTypes)
         {
         }
+        /// <summary>
+        /// Initializes a new instance of the <see cref="XmlArchive"/> class class using the metadata from other serializer.
+        /// </summary>
+        /// <param name="archive">The archive.</param>
+        public XmlArchive(Archive archive) : base(archive)
+        {
+        }
 
+        /// <summary>
+        /// Writes a node to the <see cref="Stream" />
+        /// </summary>
+        /// <param name="target"></param>
+        /// <param name="root"></param>
         protected override void WriteNode(Stream target, Node root)
         {
            SaveNode(target,root);
         }
+        /// <summary>
+        /// Parses a node form the <see cref="Stream" />
+        /// </summary>
+        /// <param name="source"></param>
+        /// <returns></returns>
         protected override Node ParseNode(Stream source)
         {
             return LoadNode(source);
         }
 
+        /// <summary>
+        /// Writes a node to a xml <see cref="Stream"/>
+        /// </summary>
+        /// <param name="target">The target.</param>
+        /// <param name="node">The node.</param>
         public static void SaveNode(Stream target, Node node)
         {
             XmlDocument doc = new XmlDocument();
@@ -30,6 +61,11 @@ namespace elios.Persist
             WriteNode(doc, mainNode, node);
             doc.Save(target);
         }
+        /// <summary>
+        /// Parses a node from a xml <see cref="Stream"/>
+        /// </summary>
+        /// <param name="source">The source.</param>
+        /// <returns></returns>
         public static Node LoadNode(Stream source)
         {
             XmlDocument doc = new XmlDocument();

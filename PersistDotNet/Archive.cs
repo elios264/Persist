@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -9,6 +10,10 @@ using System.Runtime.Serialization;
 
 namespace elios.Persist
 {
+
+    /// <summary>
+    /// Main Archive class, derive from it if you want to implement your own serializer
+    /// </summary>
     public abstract class Archive
     {
         private enum PersistType
@@ -30,6 +35,7 @@ namespace elios.Persist
 
             public bool IsAnonymousType => m_isAnonymousType.Value;
             public bool IsReference { get; set; }
+            public bool RunConstructor { get; set; } = true;
 
             public PersistMember KeyItemInfo { get; set; }
             public PersistMember ValueItemInfo { get; set; }
@@ -96,20 +102,44 @@ namespace elios.Persist
             }
         }
 
+        /// <summary>
+        /// Attribute value name used when working polymorphic types to specify the object type name
+        /// </summary>
         public static string ClassKwd = "class";
+        /// <summary>
+        /// Fallback attribute value name used when working with list or dictionaries with no <see cref="T:PersistAttribute.ChildName"/> or <see cref="T:PersistAttribute.ValueName"/> specified
+        /// </summary>
         public static string ValueKwd = "value";
+        /// <summary>
+        /// Fallback attribute value name used when working with dictionaries with no <see cref="T:PersistAttribute.KeyName"/> specified
+        /// </summary>
         public static string KeyKwd = "key";
+        /// <summary>
+        /// Fallback attribute value name used when working with lists with no <see cref="T:PersistAttribute.ChildName"/> specified
+        /// </summary>
         public static string ItemKwd = "item";
-        public static string AddressKwd = "address";
+        /// <summary>
+        /// Attribute value name used when working with referenced objects using <see cref="T:PersistAttribute.IsReference"/>
+        /// </summary>
+        public static string AddressKwd = "id";
+        /// <summary>
+        /// Default serialization provider
+        /// </summary>
+        public static IFormatProvider Provider = CultureInfo.CurrentCulture;
 
         private ObjectIDGenerator m_generator;
         private readonly PersistMember m_mainInfo;
         private readonly Type[] m_polymorphicTypes;
         private readonly Dictionary<Type,Type> m_metaTypes;
 
-        //Initialization
+        /// <summary>
+        /// Base class used to serialize and deserialize Archives
+        /// </summary>
+        /// <param name="mainType">type of the object you are going to read or write</param>
+        /// <param name="polymorphicTypes">polymorphicTypes that have to be considered when writing or reading</param>
         protected Archive(Type mainType, Type[] polymorphicTypes)
         {
+
             m_polymorphicTypes = polymorphicTypes ?? new Type[0];
 
             m_mainInfo = new PersistMember(mainType);
@@ -136,7 +166,8 @@ namespace elios.Persist
                     PersistMember childInfo = new PersistMember(memberInfo.Member)
                     {
                         Name = memberInfo.Attribute.Name ?? memberInfo.Member.Name,
-                        IsReference = memberInfo.Attribute.IsReference
+                        IsReference = memberInfo.Attribute.IsReference,
+                        RunConstructor = memberInfo.Attribute.RunConstructor
                     };
                     current.Children.Add(childInfo);
 
@@ -161,11 +192,13 @@ namespace elios.Persist
                     if (childInfo.PersistType == PersistType.List)
                     {
                         childInfo.IsReference = false;
+                        childInfo.RunConstructor = true;
 
                         var valueType = childInfo.Type?.GetEnumeratedType();
                         var valueItemInfo = new PersistMember(valueType)
                         {
                             IsReference = memberInfo.Attribute.IsReference,
+                            RunConstructor = memberInfo.Attribute.RunConstructor,
                             Name = memberInfo.Attribute.ChildName ?? ( valueType.IsGenericType ? ItemKwd : valueType.Name )
                         };
                         childInfo.ValueItemInfo = valueItemInfo;
@@ -185,6 +218,7 @@ namespace elios.Persist
                     else if (childInfo.PersistType == PersistType.Dictionary)
                     {
                         childInfo.IsReference = false;
+                        childInfo.RunConstructor = true;
 
                         var keyType = childInfo.Type?.GetGenericArguments()[0];
                         var valueType = childInfo.Type?.GetGenericArguments()[1];
@@ -197,6 +231,7 @@ namespace elios.Persist
                         var valueItemInfo = new PersistMember(valueType)
                         {
                             IsReference = memberInfo.Attribute.IsReference,
+                            RunConstructor = memberInfo.Attribute.RunConstructor,
                             Name = memberInfo.Attribute.ValueName ?? ( valueType.IsGenericType ? ValueKwd : valueType.Name )
                         };
 
@@ -233,8 +268,23 @@ namespace elios.Persist
                 throw new SerializationException("Could not initialize serializer because a circular dependency has been detected please use [Persist(IsReference = true)] to avoid this behaviour");
             }
         }
-
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Archive"/> class using the metadata from other serializer.
+        /// </summary>
+        /// <param name="archive">The archive.</param>
+        protected Archive(Archive archive)
+        {
+            m_mainInfo = archive.m_mainInfo;
+            m_polymorphicTypes = archive.m_polymorphicTypes;
+            m_metaTypes = archive.m_metaTypes;
+        }
+        
         //Methods called by TreeSerializer & BinarySerializer
+        /// <summary>
+        /// Call this method on a derived type to begin the serialization of the archive, this will start a subsecuent call of Being/End Write object/value abstract methods
+        /// </summary>
+        /// <param name="data">the object you want to serialize</param>
+        /// <param name="rootName">the root name of the document (usually used only for xml archives) </param>
         protected void WriteMain(object data, string rootName)
         {
             if (!m_mainInfo.Type.IsInstanceOfType(data))
@@ -247,6 +297,10 @@ namespace elios.Persist
 
             m_generator = null;
         }
+        /// <summary>
+        /// Call this method on a derived type to begin the deserialization of the archive, this will start a subsecuent call of Being/End Read object/value abstract methods
+        /// </summary>
+        /// <returns>returns the deserialized object</returns>
         protected object ReadMain()
         {
             object result = null;
@@ -254,29 +308,99 @@ namespace elios.Persist
 
             return result;
         }
+        /// <summary>
+        /// Call this method on a derived type to perform the second step on the deserialization of an archive that uses references to solve them
+        /// </summary>
+        /// <param name="obj"></param>
         protected void ResolveMain(object obj)
         {
             Resolve(m_mainInfo, obj);
         }
 
-        //TreeSerializer & BinarySerializer methods
+        /// <summary>
+        /// Serializes the specified data into the stream
+        /// </summary>
+        /// <param name="target">target serialization stream</param>
+        /// <param name="data">data to serialize</param>
+        /// <param name="rootName">root name of the document (eg. xml doc rootname)</param>
         public abstract void Write(Stream target, object data, string rootName = null);
+        /// <summary>
+        /// Serializes the specified data into a file
+        /// </summary>
+        /// <param name="path">target serialization file</param>
+        /// <param name="data">data to serialize</param>
+        /// <param name="rootName">root name of the document (eg. xml doc rootname)</param>
         public abstract void Write(string path, object data, string rootName = null);
-        public abstract object Read(Stream source);
-        public abstract object Read(string source);
 
+        /// <summary>
+        /// Deserializes the archive contained by the specified <see cref="Stream"/>
+        /// </summary>
+        /// <param name="source">the stream that contains the <see cref="Archive"/> to deserialize</param>
+        /// <returns></returns>
+        public abstract object Read(Stream source);
+        /// <summary>
+        /// Deserializes the archive contained in the specified filePath
+        /// </summary>
+        /// <param name="filePath">the stream that contains the <see cref="Archive"/> to deserialize</param>
+        /// <returns></returns>
+        public abstract object Read(string filePath);
+
+        /// <summary>
+        /// A nested object begins to be read
+        /// </summary>
+        /// <param name="name">object name</param>
+        /// <returns></returns>
         protected abstract bool BeginReadObject(string name);
+        /// <summary>
+        /// A nested object begins to be written
+        /// </summary>
+        /// <param name="name">object name</param>
+        /// <param name="isContainer">is the object an array or list or dictionary</param>
         protected abstract void BeginWriteObject(string name,bool isContainer = false);
 
+        /// <summary>
+        /// Ends reading a nested object
+        /// </summary>
+        /// <param name="obj">object just read for bookeeping</param>
         protected abstract void EndReadObject(object obj);
+        /// <summary>
+        /// Ends writing a nested object
+        /// </summary>
+        /// <param name="id">an unique id for the object for bookeeping</param>
         protected abstract void EndWriteObject(long id);
 
+        /// <summary>
+        /// Reads a value for the current nested object and cast it to the specified type
+        /// </summary>
+        /// <param name="name">value name</param>
+        /// <param name="type">value type</param>
+        /// <returns></returns>
         protected abstract object ReadValue(string name, Type type);
+        /// <summary>
+        /// writes a value for the current nested object
+        /// </summary>
+        /// <param name="name">value name</param>
+        /// <param name="data">value</param>
         protected abstract void WriteValue(string name, object data);
 
+        /// <summary>
+        /// Writes a reference of an object instead of its value
+        /// </summary>
+        /// <param name="name">name for the reference</param>
+        /// <param name="id">id of the reference</param>
         protected abstract void WriteReference(string name, long id);
+        /// <summary>
+        /// reads a reference
+        /// </summary>
+        /// <param name="name">name of the reference</param>
+        /// <returns></returns>
         protected abstract object ReadReference(string name);
 
+        /// <summary>
+        /// when reading or resolving queries for the number of children of the current object
+        /// </summary>
+        /// <param name="name">filter string children name</param>
+        /// <returns></returns>
         protected abstract int GetObjectChildrenCount(string name);
 
         //Helper Methods
@@ -366,10 +490,13 @@ namespace elios.Persist
                     else
                     {
                         var classType = (string)ReadValue(ClassKwd, typeof(string));
-
-                        owner = Activator.CreateInstance(classType == null
+                        var typeToCreate = classType == null
                             ? persistInfo.Type
-                            : m_polymorphicTypes.Single(type => type.Name == classType));
+                            : m_polymorphicTypes.Single(type => type.Name == classType);
+
+                        owner = persistInfo.RunConstructor 
+                            ? Activator.CreateInstance(typeToCreate) 
+                            : FormatterServices.GetUninitializedObject(typeToCreate);
                     }
                 }
 
@@ -482,7 +609,7 @@ namespace elios.Persist
                     EndWriteObject(UidOf(persistValue));
                     break;
                 case PersistType.Dictionary:
-                    BeginWriteObject(persistInfo.Name);
+                    BeginWriteObject(persistInfo.Name,true);
 
                     foreach (DictionaryEntry subItem in (IDictionary) persistValue)
                     {
