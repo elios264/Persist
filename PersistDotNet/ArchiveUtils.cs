@@ -74,7 +74,7 @@ namespace elios.Persist
         /// </summary>
         /// <param name="filePath">target file</param>
         /// <param name="data">object to serialize</param>
-        /// <param name="format">format to use</param>
+        /// <param name="format">format to use if guess guesses the format you want to use based on the file extension</param>
         /// <param name="rootName">xml rootname</param>
         /// <param name="polymorphicTypes">additional serialization types</param>
         public static void Write(string filePath, object data, ArchiveFormat format = ArchiveFormat.Guess, string rootName = null, Type[] polymorphicTypes = null)

@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Data;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -126,22 +127,38 @@ namespace elios.Persist
         /// Default serialization provider
         /// </summary>
         public static IFormatProvider Provider = CultureInfo.CurrentCulture;
+        /// <summary>
+        /// Looks for derived types in the current domain so you do not have to deal with manually setting them in the constructor
+        /// </summary>
+        public static bool LookForDerivedTypes = false;
+        private static readonly Lazy<List<Type>> DomainTypes;
+
 
         private ObjectIDGenerator m_generator;
         private readonly PersistMember m_mainInfo;
-        private readonly Type[] m_polymorphicTypes;
+        private readonly List<Type> m_polymorphicTypes;
         private readonly Dictionary<Type,Type> m_metaTypes;
+
+        static Archive()
+        {
+            DomainTypes = new Lazy<List<Type>>(() =>
+            {
+                var d = AppDomain.CurrentDomain.GetAssemblies().SelectMany(a => a.GetExportedTypes()).Where(type => !type.IsAbstract).ToList();
+                d.TrimExcess();
+                return d;
+            });
+        }
+
+
 
         /// <summary>
         /// Base class used to serialize and deserialize Archives
         /// </summary>
         /// <param name="mainType">type of the object you are going to read or write</param>
         /// <param name="polymorphicTypes">polymorphicTypes that have to be considered when writing or reading</param>
-        protected Archive(Type mainType, Type[] polymorphicTypes)
+        protected Archive(Type mainType, IEnumerable<Type> polymorphicTypes)
         {
-
-            m_polymorphicTypes = polymorphicTypes ?? new Type[0];
-
+            m_polymorphicTypes = new List<Type>(polymorphicTypes ?? Enumerable.Empty<Type>());
             m_mainInfo = new PersistMember(mainType);
             m_metaTypes = Assembly.GetAssembly(mainType)
                                   .GetTypes()
@@ -492,7 +509,7 @@ namespace elios.Persist
                         var classType = (string)ReadValue(ClassKwd, typeof(string));
                         var typeToCreate = classType == null
                             ? persistInfo.Type
-                            : m_polymorphicTypes.Single(type => type.Name == classType);
+                            : m_polymorphicTypes.First(type => type.Name == classType);
 
                         owner = persistInfo.RunConstructor 
                             ? Activator.CreateInstance(typeToCreate) 
@@ -644,6 +661,12 @@ namespace elios.Persist
         private IEnumerable<MemberAttrib> GetElegibleMembers(Type mainType)
         {
             const BindingFlags searchMode = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+
+            if (mainType.IsSealed == false && LookForDerivedTypes)
+            {
+                foreach (var derived in DomainTypes.Value.Concat(Assembly.GetAssembly(mainType).GetTypes().Where(type => !type.IsPublic && !type.IsAbstract)).Where(type => type != mainType && mainType.IsAssignableFrom(type)))
+                    m_polymorphicTypes.Add(derived);
+            }
 
             var elegibleMembers = Enumerable.Empty<MemberAttrib>();
             var allDerivedTypes = m_polymorphicTypes.Where(mainType.IsAssignableFrom).SelectMany(dT =>

@@ -64,7 +64,7 @@ namespace elios.Persist
         /// </summary>
         /// <param name="type"></param>
         /// <param name="polymorphicTypes"></param>
-        protected TreeArchive(Type type, Type[] polymorphicTypes) : base(type, polymorphicTypes)
+        protected TreeArchive(Type type, IEnumerable<Type> polymorphicTypes) : base(type, polymorphicTypes)
         {
             m_context = new Stack<Node>();
             m_writeReferences = new HashSet<long>();

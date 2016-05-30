@@ -1,40 +1,67 @@
 ﻿using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Windows;
 using elios.Persist;
 
 namespace Examples
 {
 
-    public class Person
+    // if you do not have access to modify the original type you can use the metadatypeattribute instead
+    [MetadataType(typeof(Rect))]
+    public class RectMeta
     {
-        [Persist("Friends",IsReference = true, ChildName = "Friend")]
-        private readonly List<Person> m_friends;
+        public double X { get; set; }
+        public double Y { get; set; }
 
+        // if the xml/json/yaml comes in other with other naming different from the class you want to use can specify an alias 
+        [Persist("WIDTH")] 
+        public double Width { get; set; }
+        public double Height { get; set; }
+    }
+
+    public class Student
+    {
+        //you can also deserialize to private fields just need to add the persist attribute
+        // for lists & dictionaries if you specify IsReference to true, a reference to the value is going to be saved instead
+        //if you set an empty name for the peristattribute now you have an anonymous container ( this is valid only for xml serialization )
+        //use childname to overwrite the default behaviour that is to use the name of the class (Student) 
+        [Persist("",IsReference = true, ChildName = "Friend")]
+        private readonly List<Student> m_friends;
+
+        //public properties are serialized by default
         public string Name { get; set; }
 
-        public Person()
+
+        //constructors are called by default
+        //even if m_friends was not initialized and/or readonly it'll still deserialize correctly
+        public Student()
         {
-            m_friends = new List<Person>();
+            m_friends = new List<Student>();
         }
 
-        public void AddFriend(Person friend)
+        public void AddFriend(Student friend)
         {
             m_friends.Add(friend);
         }
     }
     public class Classroom
     {
-        [Persist("",ChildName = "Student")]
-        public List<Person> Students { get; set; }
+        //Runconstructor to false will make persist use FormatterServices.GetUninitializedObject instead of Activator.CreateInstance 
+        [Persist("",ChildName = "Student", RunConstructor = false)]
+        public List<Student> Students { get; set; }
 
+        //again, alias for your property because it differs from the xml/yaml/json
+        [Persist("ClassroomRect")]
+        public System.Windows.Rect RandomExternalTypeYouWantToSerialize = new Rect(15,12,0,45);
 
         public static Classroom SampleClassroom()
         {
-            Classroom c = new Classroom {Students = new List<Person>()};
+            Classroom c = new Classroom {Students = new List<Student>()};
 
-            c.Students.Add(new Person {Name = "Alfred"});
-            c.Students.Add(new Person {Name = "Ben"});
-            c.Students.Add(new Person {Name = "Camila"});
-            c.Students.Add(new Person {Name = "Denise"});
+            c.Students.Add(new Student {Name = "Alfred"});
+            c.Students.Add(new Student {Name = "Ben"});
+            c.Students.Add(new Student {Name = "Camila"});
+            c.Students.Add(new Student {Name = "Denise"});
 
             var alfred = c.Students[0];
             var ben = c.Students[1];
@@ -52,7 +79,6 @@ namespace Examples
 
             return c;
         }
-
     }
 
     public class Transition
@@ -73,16 +99,23 @@ namespace Examples
     public class State
     {
         public string Name { get; set; }
+        
+        //this is a polymorphic member since Transition is the base class of command & condition transition
+        //so you need to do something like this: var serializer = new XmlArchive(typeof(State),new [] { typeof(ConditionTransition), typeof(CommandTransition) });
+        //or set the global setting Archive.LookForDerivedTypes = true;  this will look for all the derived types in the current domain
+        [Persist(ChildName = "tt")]
         public List<Transition> Transitions { get; set; } 
     }
 
 
     public class Automata
     {
+        //this prop is a reference, so you need to serialize it somewhere else.
         [Persist(IsReference = true)]
         public State InitialState { get; set; }
 
-        [Persist("")]
+        //since this is a only getter property it will deserialize only if the prop is initialized in the constructor
+        // otherwise it'll ignore it
         public List<State> States{ get; }
 
 
@@ -101,6 +134,7 @@ namespace Examples
                 Name = "Standing",
                 Transitions = new List<Transition>
                 {
+                    new Transition {Name = "Transition" },
                     new CommandTransition {Name = "Command1", Command = 5456},
                     new ConditionTransition {Name = "Cond1", Condition = "is_falling" },
                     new CommandTransition {Name = "Command2", Command = 22},
@@ -113,6 +147,7 @@ namespace Examples
                 Name = "Happy",
                 Transitions = new List<Transition>
                 {
+                    new Transition {Name = "Transition" },
                     new ConditionTransition {Name = "Cond3", Condition = "is_high" },
                     new ConditionTransition {Name = "Cond4", Condition = "is_drunk" }
                 }

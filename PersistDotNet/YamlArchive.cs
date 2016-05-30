@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -18,7 +19,7 @@ namespace elios.Persist
         /// </summary>
         /// <param name="type"></param>
         /// <param name="polymorphicTypes"></param>
-        public YamlArchive(Type type, Type[] polymorphicTypes = null) : base(type, polymorphicTypes)
+        public YamlArchive(Type type, IEnumerable<Type> polymorphicTypes = null) : base(type, polymorphicTypes)
         {
         }
         /// <summary>
