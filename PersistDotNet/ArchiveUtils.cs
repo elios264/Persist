@@ -1,14 +1,9 @@
 ﻿using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Xml;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using YamlDotNet.RepresentationModel;
-using YamlDotNet.Serialization;
-
 
 namespace elios.Persist
 {
@@ -94,7 +89,7 @@ namespace elios.Persist
         /// <returns></returns>
         public static Node Write(object data, string rootName = null, Type[] polymorphicTypes = null)
         {
-            return new XmlArchive(data.GetType(),polymorphicTypes).Write(data, rootName);
+            return new JsonArchive(data.GetType(),polymorphicTypes).Write(data, rootName);
         }
 
         /// <summary>
@@ -156,7 +151,7 @@ namespace elios.Persist
         /// <returns></returns>
         public static object Read(Node node, Type type, Type[] polymorphicTypes = null)
         {
-            return new XmlArchive(type, polymorphicTypes).Read(node);
+            return new JsonArchive(type, polymorphicTypes).Read(node);
         }
 
         /// <summary>
@@ -196,118 +191,6 @@ namespace elios.Persist
         }
 
         /// <summary>
-        /// deserializes an archive of unknown type to a dynamic object
-        /// </summary>
-        /// <param name="source"><see cref="Stream"/> stream</param>
-        /// <param name="format">archive format</param>
-        /// <returns></returns>
-        public static object ReadAnonymous(Stream source, ArchiveFormat format = ArchiveFormat.Guess)
-        {
-            return ReadAnonymous<object>(source, format);
-        }
-        /// <summary>
-        /// deserializes an archive of unknown type to a dynamic object
-        /// </summary>
-        /// <param name="filePath">source file</param>
-        /// <param name="format">archive format</param>
-        /// <returns></returns>
-        public static object ReadAnonymous(string filePath, ArchiveFormat format = ArchiveFormat.Guess)
-        {
-            return ReadAnonymous<object>(filePath, format);
-        }
-
-        /// <summary>
-        /// deserializes an archive of unknown type to the specified .Net type
-        /// </summary>
-        /// <typeparam name="T">can be or dynamic or oject or a dictionary</typeparam>
-        /// <param name="source">source <see cref="Stream"/></param>
-        /// <param name="format">archive format</param>
-        /// <returns></returns>
-        public static T ReadAnonymous<T>(Stream source, ArchiveFormat format = ArchiveFormat.Guess)
-        {
-            if (format == ArchiveFormat.Guess)
-                format = GuessFormat(source);
-
-            switch (format)
-            {
-            case ArchiveFormat.Xml:
-                var doc = new XmlDocument();
-                doc.Load(source);
-                doc.ChildNodes.OfType<XmlNode>().Where(x => x.NodeType == XmlNodeType.XmlDeclaration).ToList().ForEach(node => doc.RemoveChild(node));
-                doc.ElementifyAllAttributes();
-                doc.RemoveAllAttributes();
-                return JsonConvert.DeserializeObject<T>(JsonConvert.SerializeXmlNode(doc));
-            case ArchiveFormat.Json:
-                using (var reader = new StreamReader(source, Encoding.UTF8, true, 1024, true))
-                    return JsonConvert.DeserializeObject<T>(reader.ReadToEnd());
-            case ArchiveFormat.Yaml:
-                using (var reader = new StreamReader(source, Encoding.UTF8, true, 1024, true))
-                    return JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(new Deserializer().Deserialize(reader)));
-            case ArchiveFormat.Guess:
-                throw new FormatException(nameof(source));
-            default:
-                throw new ArgumentOutOfRangeException(nameof(format), format, null);
-            }
-        }
-        /// <summary>
-        /// deserializes an archive of unknown type to the specified .Net type
-        /// </summary>
-        /// <typeparam name="T">can be or dynamic or oject or a dictionary</typeparam>
-        /// <param name="filePath"> source file</param>
-        /// <param name="format">archive format</param>
-        /// <returns></returns>
-        public static T ReadAnonymous<T>(string filePath, ArchiveFormat format = ArchiveFormat.Guess)
-        {
-            if (format == ArchiveFormat.Guess)
-                format = GuessFormat(filePath);
-
-            using (var readStream = new FileStream(filePath, FileMode.Open))
-                return ReadAnonymous<T>(readStream, format);
-        }
-
-        /// <summary>
-        /// serializes the specified <see cref="object"/> to the specified format
-        /// </summary>
-        /// <param name="target">target <see cref="Stream"/></param>
-        /// <param name="data">object to serialize</param>
-        /// <param name="format">format</param>
-        /// <param name="rootName">name of the root (for xml)</param>
-        public static void WriteAnonymous(Stream target, object data, ArchiveFormat format = ArchiveFormat.Xml, string rootName = "Root")
-        {
-            switch (format)
-            {
-            case ArchiveFormat.Xml:
-                JsonConvert.DeserializeXNode(JsonConvert.SerializeObject(data), rootName).Save(target);
-                break;
-            case ArchiveFormat.Json:
-                using (var writer = new StreamWriter(target, new UTF8Encoding(false), 1024, true))
-                    JsonSerializer.Create().Serialize(writer, data);
-                break;
-            case ArchiveFormat.Yaml:
-                using (var writer = new StreamWriter(target, new UTF8Encoding(false), 1024, true))
-                    new Serializer().Serialize(writer,data);
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(format), format, null);
-            }
-        }
-        /// <summary>
-        /// serializes the specified <see cref="object"/> to the specified format
-        /// </summary>
-        /// <param name="filePath">target file</param>
-        /// <param name="data">object to serialize</param>
-        /// <param name="format">format</param>
-        /// <param name="rootName">name of the root (for xml)</param>
-        public static void WriteAnonymous(string filePath, object data, ArchiveFormat format = ArchiveFormat.Guess, string rootName = "Root")
-        {
-            if (format == ArchiveFormat.Guess)
-                format = GuessFormat(filePath);
-
-            using (var writeStream = new FileStream(filePath, FileMode.Create))
-                WriteAnonymous(writeStream, data,format,rootName);
-        }
-
-        /// <summary>
         /// converts an archive to a new format and returns it as a string
         /// </summary>
         /// <param name="source">source <see cref="Stream"/></param>
@@ -316,12 +199,14 @@ namespace elios.Persist
         /// <param name="rootName">root name (for xml)</param>
         /// <remarks>if the newformat and the sourceformat are the same the conversion stil takes place</remarks>
         /// <returns></returns>
-        public static string Convert(Stream source, ArchiveFormat newFormat = ArchiveFormat.Xml, ArchiveFormat sourceFormat = ArchiveFormat.Guess, string rootName = "Root")
+        public static string Convert(Stream source, ArchiveFormat newFormat = ArchiveFormat.Xml, ArchiveFormat sourceFormat = ArchiveFormat.Guess, string rootName = null)
         {
-            var obj = ReadAnonymous(source,sourceFormat);
+            var neutralformat = LoadNode(source, sourceFormat);
+            neutralformat.Name = rootName ?? neutralformat.Name;
+
             using (var targetStream = new MemoryStream())
             {
-                WriteAnonymous(targetStream, obj, newFormat, rootName);
+                SaveNode(targetStream, neutralformat, newFormat);
                 return Encoding.UTF8.GetString(targetStream.ToArray());
             }
         }
@@ -336,6 +221,9 @@ namespace elios.Persist
         /// <returns></returns>
         public static string Convert(string filePath, ArchiveFormat newFormat = ArchiveFormat.Xml, ArchiveFormat sourceFormat = ArchiveFormat.Guess, string rootName = "Root")
         {
+            if (sourceFormat == ArchiveFormat.Guess)
+                sourceFormat = GuessFormat(filePath);
+
             using (var readStream = new FileStream(filePath, FileMode.Open))
                 return Convert(readStream, newFormat, sourceFormat, rootName);
         }
@@ -412,34 +300,6 @@ namespace elios.Persist
                 return LoadNode(readStream, format);
         }
 
-        /// <summary>
-        /// Instanciates the node as an dynamic object
-        /// </summary>
-        /// <param name="node">The node.</param>
-        /// <returns></returns>
-        public static object NodeToAnonymous(Node node)
-        {
-            using (var writeStream = new MemoryStream())
-            {
-                SaveNode(writeStream,node,ArchiveFormat.Json);
-                writeStream.Seek(0, SeekOrigin.Begin);
-                return ReadAnonymous(writeStream, ArchiveFormat.Json);
-            }
-        }
-        /// <summary>
-        /// Converts an object to its node reperentation
-        /// </summary>
-        /// <param name="data">The object</param>
-        /// <returns></returns>
-        public static Node AnonymousToNode(object data)
-        {
-            using (var writeStream = new MemoryStream())
-            {
-                WriteAnonymous(writeStream, data, ArchiveFormat.Json);
-                writeStream.Seek(0, SeekOrigin.Begin);
-                return LoadNode(writeStream, ArchiveFormat.Json);
-            }
-        }
 
         /// <summary>
         /// guesses the archive format of a file by extension
@@ -480,35 +340,31 @@ namespace elios.Persist
                     doc.Load(source);
                     return ArchiveFormat.Xml;
                 }
-                catch (Exception)
-                {
-                }
+                catch (Exception) { }
 
                 source.Seek(0, SeekOrigin.Begin);
                 try
                 {
                     using (var reader = new StreamReader(source, Encoding.UTF8, true, 1024, true))
-                        JObject.Parse(reader.ReadToEnd());
-
-                    return ArchiveFormat.Json;
-                }
-                catch (Exception)
-                {
-                }
-
-
-                source.Seek(0, SeekOrigin.Begin);
-                try
-                {
-                    using (var reader = new StreamReader(source, Encoding.UTF8, true, 1024, true))
+                    {
                         new YamlStream().Load(reader);
+                        source.Seek(0, SeekOrigin.Begin);
 
-                    return ArchiveFormat.Yaml;
-                }
-                catch (Exception)
-                {
-                }
+                        var archive = reader.ReadToEnd();
+                        var open = 0;
+                        var close = 0;
+                        foreach (var c in archive)
+                        {
+                            open = c == '{' ? open+1 : open;
+                            close = c == '}' ? close + 1 : close;
+                        }
 
+                        return open == close
+                            ? ArchiveFormat.Json
+                            : ArchiveFormat.Yaml;
+                    }
+                }
+                catch (Exception) { }
 
                 return ArchiveFormat.Guess;
             }

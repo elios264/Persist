@@ -23,7 +23,7 @@ namespace Examples
     {
         static void Main(string[] args)
         {
-            JsonArchive archive = new JsonArchive(typeof(Movie));
+            var archive = new JsonArchive(typeof(Movie));
 
             var movieFile = "badboys.movie";
 
@@ -31,18 +31,40 @@ namespace Examples
             archive.Write(movieFile,Movie.BadBoys);
             //or
             ArchiveUtils.Write(movieFile, Movie.BadBoys, ArchiveFormat.Json);
-            //or
-            ArchiveUtils.WriteAnonymous(movieFile + ".json",Movie.BadBoys);
 
             //Deserialize
             var badBoysMovie = (Movie)archive.Read(movieFile);
             //or 
-            var bboysMovie2 = ArchiveUtils.Read<Movie>(movieFile, ArchiveFormat.Json);
+            var bboysMovie2 = ArchiveUtils.Read<Movie>(movieFile);
             //or
-            var bboysMovie3 = ArchiveUtils.ReadAnonymous<dynamic>(movieFile, ArchiveFormat.Json);
+            var bboysMovie3 = ArchiveUtils.Read<dynamic>(movieFile);
             //or
-            var bboysMovie4 = ArchiveUtils.ReadAnonymous<IDictionary<string,object>>(movieFile + ".json", ArchiveFormat.Guess);
+            var bboysMovie4 = ArchiveUtils.Read<IDictionary<string,object>>(movieFile, ArchiveFormat.Json);
+            //or
+            var bboysMovie5 = ArchiveUtils.LoadNode(movieFile, ArchiveFormat.Json);
+            // bboysMovie5.AsDynamic() if you want dynamic 
 
+            //Dynamic add
+            bboysMovie3.Genres[2] = new
+            {
+                Genre = Movie.Genre.Boring,
+                Likes = 222
+            };
+
+            bboysMovie3.Genres.Add("item", new
+            {
+                Genre = Movie.Genre.Thriller,
+                Likes = -1
+            });
+
+            //convert to movie?
+            Movie m = ArchiveUtils.Read<Movie>((Node)bboysMovie3);
+
+            //Save again
+            ArchiveUtils.Write(movieFile, bboysMovie3, ArchiveFormat.Yaml);
+
+            //reload as a movie again
+            var mm = ArchiveUtils.Read<Movie>(movieFile, ArchiveFormat.Yaml);
 
 
             //Cyclic references
@@ -77,8 +99,6 @@ namespace Examples
             xmlArchive.Write(classroomFile, c);
             //or
             ArchiveUtils.Write(classroomFile, c);
-            //this is not valid because this object uses references and metadatatypes
-            //ArchiveUtils.WriteAnonymous(classroomFile, c);
 
 
             //Deserialize

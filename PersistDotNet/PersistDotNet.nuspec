@@ -6,11 +6,38 @@
     <title>$title$</title>
     <authors>$author$</authors>
     <owners>$author$</owners>
-    <projectUrl>https://github.com/elios264/Pakal_PersistDotNet</projectUrl>
-    <licenseUrl>https://raw.githubusercontent.com/elios264/Pakal_PersistDotNet/master/LICENSE</licenseUrl>
-    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <projectUrl>https://github.com/elios264/Persist</projectUrl>
+    <licenseUrl>https://raw.githubusercontent.com/elios264/Persist/master/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>$description$</description>
-    <releaseNotes>First release, check documentation at https://github.com/elios264/Pakal_PersistDotNet</releaseNotes>
+    <releaseNotes>
+	
+Can Serialize/Deserialize:
+	- Arbitrary custom types, native types, anonymous types, enums, IDictionary, IList, IConvertible
+	- Multiply and possibly cyclical references to objects
+	- Polymorphic objects
+	- External types using metadata to specify the properties to use
+	- Evolving types : you can add or remove properties/fields with no problem
+	- Xml, Json, Yaml and any format you want because it is extensible
+	- To/From a generic Node object that you can add/remove attributes and children
+	- Using a PersistAttribute that allows you to:
+		- Change the member name
+		- Specify if serialize/deserialize as a reference
+		- Ignore a member
+
+Features:
+	- Serialize and Deserialize any .Net object with Persist's powerful serializer
+	- Since the metadata for the type is created on the constructor 
+	serialization and deserialization is really fast
+	- Persist is open source so you can contribute and completely free for comercial use
+	- Create, parse, query and modify archives using Persist's Node and NodeAttribute objects
+	- Serialization of objects with references is clearer and smaller than Newtonsoft Json.net library
+	- Easy to use, comes with a static ArchiveUtils class with a lot of helper methods
+	- if you need it Persist supports conversion between all of the 3 data formats ( xml, yaml, json)
+
+check more documentation at https://github.com/elios264/Persist	
+	
+	</releaseNotes>
     <copyright>Copyright 2016</copyright>
     <tags>Xml Json Yaml Serialization Serializer XmlSerializer Persist</tags>
   </metadata>

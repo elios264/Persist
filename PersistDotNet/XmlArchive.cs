@@ -10,6 +10,7 @@ namespace elios.Persist
     /// <summary>
     /// Xml serializer
     /// </summary>
+    /// <remarks>this class is thread safe</remarks>
     /// <seealso cref="elios.Persist.TreeArchive" />
     public sealed class XmlArchive : TreeArchive
     {
@@ -72,7 +73,7 @@ namespace elios.Persist
             XmlDocument doc = new XmlDocument();
             doc.Load(source);
 
-            Node mainNode = new Node(doc.DocumentElement.Name);
+            Node mainNode = new Node {Name = doc.DocumentElement.Name };
 
             ParseNode(doc.DocumentElement, mainNode);
 
@@ -85,11 +86,13 @@ namespace elios.Persist
 
             foreach (XmlNode xmlNode in curXmlNode.ChildNodes)
             {
-                Node childNode = new Node(xmlNode.Name);
+                Node childNode = new Node {Name = xmlNode.Name };
                 curNode.Nodes.Add(childNode);
 
                 ParseNode(xmlNode, childNode);
             }
+
+            curNode.IsContainer = curNode.Attributes.Count == 0 && curNode.Nodes.Count > 0 && curNode.Nodes.Select(_ => _.Name).Distinct().Count() == 1;
 
         }
         internal static void WriteNode(XmlDocument doc, XmlNode xmlNode, Node node)

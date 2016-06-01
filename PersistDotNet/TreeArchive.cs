@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
@@ -11,6 +11,7 @@ namespace elios.Persist
     /// <summary>
     /// Creates Archives in Tree formats like (xml, json, yaml), derive from it if you want to support a new tree format
     /// </summary>
+    /// <remarks>this class is thread safe</remarks>
     /// <seealso cref="elios.Persist.Archive" />
     public abstract class TreeArchive : Archive
     {
@@ -43,7 +44,7 @@ namespace elios.Persist
                 get { return m_realNode.Nodes; }
             }
 
-            public ParentNode(Node realNode) : base(string.Empty)
+            public ParentNode(Node realNode)
             {
                 m_realNode = realNode;
             }
@@ -119,8 +120,12 @@ namespace elios.Persist
         /// <param name="data">The data.</param>
         /// <param name="rootName">Name of the root (usually for xml archives)</param>
         /// <returns></returns>
+        [SuppressMessage("ReSharper", "RedundantCast")]
         public Node Write(object data, string rootName = null)
         {
+            if (data is DynamicNode)
+                return (Node)( (dynamic)data );
+
             lock (this)
             {
                 WriteMain(data,rootName);
@@ -141,12 +146,12 @@ namespace elios.Persist
         {
             if (m_context.Count == 0)
             {
-                m_root = new Node(name) { IsContainer = isContainer};
+                m_root = new Node { Name = name, IsContainer = isContainer};
                 m_context.Push(m_root);
             }
             else if (!string.IsNullOrEmpty(name))
             {
-                var element = new Node(name) { IsContainer = isContainer};
+                var element = new Node { Name = name, IsContainer = isContainer};
                 Current.Nodes.Add(element);
                 m_context.Push(element);
             }
@@ -209,11 +214,15 @@ namespace elios.Persist
         /// <returns></returns>
         public object Read(Node node)
         {
+            if (CreationType == typeof(object) || CreationType== typeof(IDictionary<string,object>))
+                return node.AsDynamic();
+
+            var firstStep = new Node(node);
             var secondStep = new Node(node);
 
             lock (this)
             {
-                m_root = node;
+                m_root = firstStep;
 
                 var result = ReadMain();
                 if (m_readReferences.Count > 0) //Resolve if there are pending references

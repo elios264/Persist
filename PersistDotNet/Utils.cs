@@ -1,9 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Xml;
 
 namespace elios.Persist
 {
@@ -17,10 +17,46 @@ namespace elios.Persist
 
             // otherwise provided by collection
             var theTypes = type.GetGenericArguments();
-            if (theTypes.Length > 0) return theTypes[0];
 
-            // otherwise is not an 'enumerated' type
-            return null;
+            if (theTypes.Length > 0)
+                return theTypes[0];
+
+            foreach (var @interface in type.GetInterfaces())
+            {
+                if (@interface.IsGenericType && @interface.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+                {
+                    var args = @interface.GetGenericArguments();
+                    return args[0];
+                }
+            }
+
+            if (typeof(IEnumerable).IsAssignableFrom(type))
+                return typeof(object);
+
+
+            throw new ArgumentException($"{type} is not a Enumerable");
+        }
+
+        public static Tuple<Type,Type> GetDictionaryTypes(this Type type)
+        {
+            var types = type.GetGenericArguments();
+
+            if (types.Length == 2)
+                return Tuple.Create(types[0], types[1]);
+
+            foreach (var @interface in type.GetInterfaces())
+            {
+                if (@interface.IsGenericType && @interface.GetGenericTypeDefinition() == typeof(IDictionary<,>))
+                {
+                    var args = @interface.GetGenericArguments();
+                    return Tuple.Create(args[0], args[1]);
+                }
+            }
+
+            if (typeof(IDictionary).IsAssignableFrom(type))
+                return Tuple.Create(typeof(object), typeof(object));
+
+            throw new ArgumentException($"{type} is not a dictionary");
         }
 
         public static bool HasCircularDependency<T>(IEnumerable<T> source, Func<T, IEnumerable<T>> getDependencies)
@@ -60,27 +96,6 @@ namespace elios.Persist
                    && (type.Name.StartsWith("<>", StringComparison.OrdinalIgnoreCase) || type.Name.StartsWith("VB$", StringComparison.OrdinalIgnoreCase))
                    && (type.Name.Contains("AnonymousType") || type.Name.Contains("AnonType"))
                    && type.GetTypeInfo().GetCustomAttributes(typeof(CompilerGeneratedAttribute)).Any();
-        }
-
-        public static void RemoveAllAttributes(this XmlDocument xmlDocument)
-        {
-            if (xmlDocument == null || !xmlDocument.HasChildNodes) return;
-
-            foreach (var xmlElement in xmlDocument.SelectNodes(".//*").Cast<XmlElement>().Where(xmlElement => xmlElement.HasAttributes))
-                xmlElement.Attributes.RemoveAll();
-        }
-
-        public static void ElementifyAllAttributes(this XmlDocument xmlDocument)
-        {
-            if (xmlDocument == null || !xmlDocument.HasChildNodes) return;
-
-            foreach (var xmlElement in xmlDocument.SelectNodes(".//*").Cast<XmlElement>().Where(xmlElement => xmlElement.HasAttributes))
-            {
-                foreach (XmlAttribute xmlAttribute in xmlElement.Attributes)
-                    xmlElement.AppendChild(xmlDocument.CreateElement(xmlAttribute.Name)).InnerText = xmlAttribute.Value;
-
-                xmlElement.Attributes.RemoveAll();
-            }
         }
 
         public class OnDispose : IDisposable

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using YamlDotNet.RepresentationModel;
 
@@ -11,6 +12,7 @@ namespace elios.Persist
     /// <summary>
     /// Yaml Serializer
     /// </summary>
+    /// <remarks>this class is thread safe</remarks>
     /// <seealso cref="elios.Persist.TreeArchive" />
     public sealed class YamlArchive : TreeArchive
     {
@@ -67,13 +69,18 @@ namespace elios.Persist
                 doc = stream.Documents.Single();
             }
 
-            var mainNode = new Node(string.Empty);
+            var mainNode = new Node {Name = string.Empty };
 
-            ParseNode(doc.RootNode, mainNode);
-
+            try
+            {
+                ParseNode(doc.RootNode, mainNode);
+            }
+            catch (Exception)
+            {
+                throw new SerializationException("invalid json/yaml document");
+            }
             return mainNode;
         }
-
         /// <summary>
         /// writes a <see cref="Node"/> to a yaml stream
         /// </summary>
@@ -91,7 +98,7 @@ namespace elios.Persist
             }
         }
 
-        internal static void ParseNode(YamlNode curYamlNode, Node curNode)
+        private static void ParseNode(YamlNode curYamlNode, Node curNode)
         {
             if (curYamlNode is YamlMappingNode)
             {
@@ -101,7 +108,7 @@ namespace elios.Persist
                         curNode.Attributes.Add(new NodeAttribute(( (YamlScalarNode) pair.Key ).Value, ( (YamlScalarNode) pair.Value ).Value));
                     else
                     {
-                        var childNode = new Node(pair.Key.ToString());
+                        var childNode = new Node {Name = pair.Key.ToString() };
 
                         curNode.Nodes.Add(childNode);
                         ParseNode(pair.Value,childNode);
@@ -114,7 +121,7 @@ namespace elios.Persist
 
                 foreach (var node in ((YamlSequenceNode)curYamlNode).Children)
                 {
-                    var childNode = new Node(string.Empty);
+                    var childNode = new Node {Name = string.Empty };
 
                     curNode.Nodes.Add(childNode);
                     ParseNode(node, childNode);

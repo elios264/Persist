@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Newtonsoft.Json;
 using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
 
@@ -11,17 +10,10 @@ namespace elios.Persist
 {
     /// <summary>
     /// Json Serializer
+    /// <remarks>this class is thread safe</remarks>
     /// </summary>
     public sealed class JsonArchive : TreeArchive
     {
-        /// <summary>
-        /// Gets or sets a value indicating whether to pretty print the json
-        /// </summary>
-        /// <value>
-        ///   <c>true</c> if [pretty print]; otherwise, false<c>false</c>.
-        /// </value>
-        public bool PrettyPrint { get; set; } = true;
-
         /// <summary>
         /// Initializes <see cref="JsonArchive"/> that reads archives of the specified type
         /// </summary>
@@ -45,7 +37,7 @@ namespace elios.Persist
         /// <param name="root"></param>
         protected override void WriteNode(Stream target, Node root)
         {
-            SaveNode(target, root,PrettyPrint);
+            SaveNode(target, root);
         }
         /// <summary>
         /// Parses a node form the <see cref="Stream"/>
@@ -64,18 +56,7 @@ namespace elios.Persist
         /// <returns></returns>
         public static Node LoadNode(Stream source)
         {
-            YamlDocument doc;
-            using (var reader = new StreamReader(source, Encoding.UTF8, true, 1024, true))
-            {
-                var yamlReader = new YamlStream();
-                yamlReader.Load(reader);
-                doc = yamlReader.Documents.Single();
-            }
-
-            var mainNode = new Node(string.Empty);
-            YamlArchive.ParseNode(doc.RootNode, mainNode);
-
-            return mainNode;
+            return YamlArchive.LoadNode(source);
         }
 
         /// <summary>
@@ -83,8 +64,7 @@ namespace elios.Persist
         /// </summary>
         /// <param name="target"></param>
         /// <param name="node"></param>
-        /// <param name="prettyPrint">pretty json?</param>
-        public static void SaveNode(Stream target, Node node, bool prettyPrint = true)
+        public static void SaveNode(Stream target, Node node)
         {
             YamlDocument doc = new YamlDocument(new YamlMappingNode());
             YamlArchive.WriteNode((YamlMappingNode)doc.RootNode, node);
@@ -101,7 +81,7 @@ namespace elios.Persist
                     yamlDynamicObj = new Deserializer().Deserialize(reader);
 
                 using (var jsonWriter = new StreamWriter(target, new UTF8Encoding(false), 1024, true))
-                    new JsonSerializer { Formatting = prettyPrint ? Formatting.Indented : Formatting.None }.Serialize(jsonWriter, yamlDynamicObj);
+                    new Serializer(SerializationOptions.JsonCompatible).Serialize(jsonWriter,yamlDynamicObj);
             }
         }
     }
