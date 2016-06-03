@@ -7,6 +7,8 @@
 
 Persist is a .Net serializer/deserializer supporting  XML, Json & Yaml formats
 
+Nuget package available!: Install-Package Persist
+
 Can Serialize/Deserialize:
 	- Arbitrary custom types, native types, anonymous types, enums, IDictionary, IList, IConvertible
 	- Multiply and possibly cyclical references to objects
