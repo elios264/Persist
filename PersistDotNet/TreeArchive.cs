@@ -120,7 +120,6 @@ namespace elios.Persist
         /// <param name="data">The data.</param>
         /// <param name="rootName">Name of the root (usually for xml archives)</param>
         /// <returns></returns>
-        [SuppressMessage("ReSharper", "RedundantCast")]
         public Node Write(object data, string rootName = null)
         {
             lock (this)
@@ -180,7 +179,10 @@ namespace elios.Persist
         /// <param name="data">value</param>
         protected override void WriteValue(string name, object data)
         {
-            Current.Attributes.Add(new NodeAttribute(name,(IConvertible)data));
+            if (name != ClassKwd || !( Current is ParentNode ))
+                Current.Attributes.Add(new NodeAttribute(name, (IConvertible)data));
+            else
+                throw new InvalidOperationException($"Inside Object: {{{Current.Name}}}. Anonymous containers ( aka [Persist(\"\")] ) are not allowed to be polymorphic");
         }
 
         /// <summary>

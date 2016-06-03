@@ -482,7 +482,8 @@ namespace elios.Persist
                     {
                         Name = memberInfo.Attribute.Name ?? memberInfo.Member.Name,
                         IsReference = memberInfo.Attribute.IsReference,
-                        RunConstructor = memberInfo.Attribute.RunConstructor
+                        RunConstructor = memberInfo.Attribute.RunConstructor,
+                        ChildName =  memberInfo.Attribute.ChildName
                     };
                     current.Children.Add(childInfo);
 
@@ -557,9 +558,7 @@ namespace elios.Persist
 
                         List<PersistMember> typeMembers;
                         if (definedMembers.TryGetValue(dictypes.Item2, out typeMembers))
-                        {
                             valueItemInfo.Children = typeMembers;
-                        }
                         else if (GetPersistType(valueItemInfo.Type) == PersistType.Complex)
                         {
                             context.Push(valueItemInfo);
@@ -567,9 +566,7 @@ namespace elios.Persist
                         }
 
                         if (definedMembers.TryGetValue(dictypes.Item1, out typeMembers))
-                        {
                             keyItemInfo.Children = typeMembers;
-                        }
                         else if (GetPersistType(keyItemInfo.Type) == PersistType.Complex)
                         {
                             context.Push(keyItemInfo);
@@ -691,6 +688,10 @@ namespace elios.Persist
                 typeToCreate = GetFriendlyType(typeName);
                 m_additionalTypes.Add(typeToCreate, GeneratePersistMember(typeToCreate));
             }
+
+            if (typeToCreate == null || !info.Type.IsAssignableFrom(typeToCreate ?? info.Type))
+                typeToCreate = info.Type;
+
             typeToCreate = typeToCreate ?? info.Type;
 
             return info.RunConstructor

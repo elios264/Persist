@@ -135,7 +135,7 @@ namespace elios.Persist
                     ((YamlMappingNode)yamlNode).Add(new YamlScalarNode(attribute.Name), new YamlScalarNode(attribute.Value));
                 }
             else if (node.Attributes.Any(a => a.Name != ClassKwd))
-                throw new InvalidOperationException("arrays cannot contain attributes");
+                throw new InvalidOperationException($"YamlArchive/JsonArchive cannot serialize anonymous containers aka [Persist(\"\")]");
 
             foreach (var e in node.Nodes)
             {
@@ -157,7 +157,7 @@ namespace elios.Persist
                     var mNode = ((YamlMappingNode)yamlNode);
 
                     if (mNode.Children.ContainsKey(new YamlScalarNode(e.Name)))
-                        throw new InvalidOperationException(" YamlArchive/JsonArchive cannot serialize anonymous containers aka [Persist(\"\")]");
+                        throw new InvalidOperationException($"YamlArchive/JsonArchive cannot serialize anonymous containers aka [Persist(\"\")]");
                     mNode.Add(new YamlScalarNode(e.Name), childNode);
                 }
                 else
