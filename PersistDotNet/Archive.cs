@@ -42,26 +42,34 @@ namespace elios.Persist
         /// </summary>
         public static IFormatProvider Provider = CultureInfo.CurrentCulture;
 
+        private readonly bool m_isDynamic;
         private ObjectIDGenerator m_generator;
         private readonly PersistMember m_mainInfo;
+        private static readonly Dictionary<Type,Type> MetaTypes;
         private readonly Dictionary<Type,PersistMember> m_additionalTypes;
-        private readonly Dictionary<Type,Type> m_metaTypes;
-
-        private const string UnknownTypeException = "the type {0} was not expected. Use PersistInclude or the parameter additional types to specify types that are not know statically";
 
         /// <summary>
         /// Gets the <see cref="Type"/> used to create this archive
         /// </summary>
-        public Type CreationType => m_mainInfo.Type;
+        public Type CreationType => m_isDynamic ? null : m_mainInfo.Type;
         /// <summary>
-        /// Gets the additional types used to create this archive.
-        /// </summary>
-        /// <value>
-        /// The additional types.
-        /// </value>
+                                                                                 /// Gets the additional types used to create this archive.
+                                                                                 /// </summary>
+                                                                                 /// <value>
+                                                                                 /// The additional types.
+                                                                                 /// </value>
         public IReadOnlyCollection<Type> AdditionalTypes
         {
             get { return (IReadOnlyCollection<Type>)( (object)m_additionalTypes.Keys ); }
+        }
+
+        static Archive()
+        {
+            MetaTypes = AppDomain.CurrentDomain.GetAssemblies()
+                                  .Where(a => !a.IsDynamic)
+                                  .SelectMany(a => a.GetExportedTypes())
+                                  .Where(type => Attribute.IsDefined(type, typeof(MetadataTypeAttribute)))
+                                  .ToDictionary(type => type.GetCustomAttribute<MetadataTypeAttribute>().MetadataClassType, type => type);
         }
 
         /// <summary>
@@ -71,13 +79,18 @@ namespace elios.Persist
         /// <param name="additionalTypes">additionalTypes that have to be considered when writing or reading</param>
         protected Archive(Type mainType, params Type[] additionalTypes)
         {
-            m_metaTypes = Assembly.GetAssembly(mainType)
-                                  .GetTypes()
-                                  .Where(type => Attribute.IsDefined(type, typeof(MetadataTypeAttribute)))
-                                  .ToDictionary(type => type.GetCustomAttribute<MetadataTypeAttribute>().MetadataClassType, type => type);
-
-            m_additionalTypes = additionalTypes.ToDictionary(type => type, GeneratePersistMember);
-            m_mainInfo = GeneratePersistMember(mainType);
+            if (mainType != null)
+            {
+                m_additionalTypes = additionalTypes.ToDictionary(type => type, GeneratePersistMember);
+                m_mainInfo = GeneratePersistMember(mainType);
+                m_isDynamic = false;
+            }
+            else
+            {
+                m_additionalTypes = new Dictionary<Type, PersistMember>();
+                m_mainInfo = new PersistMember(typeof(object));
+                m_isDynamic = true;
+            }
         }
         /// <summary>
         /// Initializes a new instance of the <see cref="Archive"/> class using the metadata from other serializer.
@@ -87,7 +100,6 @@ namespace elios.Persist
         {
             m_mainInfo = archive.m_mainInfo;
             m_additionalTypes = archive.m_additionalTypes;
-            m_metaTypes = archive.m_metaTypes;
         }
 
         //Methods called by TreeSerializer & BinarySerializer
@@ -371,7 +383,12 @@ namespace elios.Persist
                     PersistMember persistTypeInfo;
 
                     if (!m_additionalTypes.TryGetValue(valueType, out persistTypeInfo))
-                        throw new InvalidOperationException(string.Format(UnknownTypeException, valueType));
+                    {
+                        if (m_isDynamic)
+                            m_additionalTypes.Add(valueType, persistTypeInfo = GeneratePersistMember(valueType));
+                        else
+                            throw new InvalidOperationException($"the type {valueType} was not expected. Use PersistInclude or the parameter additional types to specify types that are not know statically");
+                    }
 
                     persistTypeInfo.Name = persistInfo.Name;
                     persistTypeInfo.ChildName = persistInfo.ChildName;
@@ -387,7 +404,7 @@ namespace elios.Persist
                     {
                         BeginWriteObject(persistInfo.Name);
                         if (isPolymorphic)
-                            WriteValue(ClassKwd, valueType.GetFriendlyName());
+                            WriteValue(ClassKwd, GetFriendlyName(valueType));
                         WriteValue(ValueKwd, persistValue);
                         EndWriteObject(UidOf(persistValue));
                     }
@@ -400,7 +417,7 @@ namespace elios.Persist
                         BeginWriteObject(persistInfo.Name);
 
                         if (isPolymorphic)
-                            WriteValue(ClassKwd, valueType.GetFriendlyName());
+                            WriteValue(ClassKwd, GetFriendlyName(valueType));
 
                         switch (persistInfo.PersistType)
                         {
@@ -436,7 +453,6 @@ namespace elios.Persist
         private PersistMember GeneratePersistMember(Type type)
         {
             PersistMember persistMember;
-
             switch (GetPersistType(type))
             {
             case PersistType.Convertible:
@@ -602,7 +618,7 @@ namespace elios.Persist
             }
 
             Type metaType;
-            bool isMetaType = m_metaTypes.TryGetValue(mainType, out metaType);
+            bool isMetaType = MetaTypes.TryGetValue(mainType, out metaType);
             bool isAnonymous = mainType.IsAnonymousType();
             var realFields = new FieldInfo[0];
             var realProperties = new PropertyInfo[0];
@@ -665,17 +681,71 @@ namespace elios.Persist
             if (info.IsAnonymousType)
                 return FormatterServices.GetUninitializedObject(info.Type);
 
-            string classType = (string)ReadValue(ClassKwd, typeof(string));
-            Type typeToCreate = classType == null
+            string typeName = (string)ReadValue(ClassKwd, typeof(string));
+            Type typeToCreate = typeName == null
                 ? info.Type
-                : m_additionalTypes.Keys.FirstOrDefault(t => t.GetFriendlyName() == classType);
+                : m_additionalTypes.Keys.FirstOrDefault(t => GetFriendlyName(t) == typeName || GetFriendlyName(t,true) == typeName);
 
-            if (typeToCreate != null)
-                return info.RunConstructor
-                    ? Activator.CreateInstance(typeToCreate)
-                    : FormatterServices.GetUninitializedObject(typeToCreate);
+            if (m_isDynamic && typeToCreate == null)
+            {
+                typeToCreate = GetFriendlyType(typeName);
+                m_additionalTypes.Add(typeToCreate, GeneratePersistMember(typeToCreate));
+            }
+            typeToCreate = typeToCreate ?? info.Type;
 
-            throw new InvalidOperationException(string.Format(UnknownTypeException, classType));
+            return info.RunConstructor
+                ? Activator.CreateInstance(typeToCreate)
+                : FormatterServices.GetUninitializedObject(typeToCreate);
+
+        }
+        private string GetFriendlyName(Type type, bool forceFullName = false)
+        {
+            var friendlyName = m_isDynamic || forceFullName ? type.FullName : type.Name;
+            if (!type.IsGenericType) return friendlyName;
+
+            var iBacktick = friendlyName.IndexOf('`');
+            if (iBacktick > 0) friendlyName = friendlyName.Remove(iBacktick);
+
+            var genericParameters = type.GetGenericArguments().Select(t => GetFriendlyName(t,forceFullName));
+            friendlyName += "<" + string.Join(", ", genericParameters) + ">";
+
+            return friendlyName;
+        }
+        private static Type GetFriendlyType(string typeName)
+        {
+            int index = typeName.IndexOf("<");
+            if (index == -1)
+                return Type.GetType(typeName)
+                    ?? Assembly.GetEntryAssembly().GetType(typeName)
+                    ?? AppDomain.CurrentDomain.GetAssemblies().Except(new []{ Assembly.GetEntryAssembly(), Assembly.GetAssembly(typeof(int)), }).Select(a => a.GetType(typeName)).First(t => t != null);
+
+            string genericClassType = typeName.Substring(0, index);
+            string genericParameters = typeName.Substring(index + 1);
+            genericParameters = genericParameters.Substring(0, genericParameters.Length - 1);
+
+            int open = 0; int close = 0; int i = 0; bool found = false;
+            for (var c = genericParameters[i]; i < genericParameters.Length; c = genericParameters[i], i++)
+            {
+                if (c == '<') open ++;
+                if (c == '>') close ++;
+                if (c == ',' && open == close)
+                {
+                    i--;
+                    found = true;
+                    break;
+                }
+            }
+
+            var type1 = genericParameters.Substring(0,i).Trim();
+            var type2 = found ? genericParameters.Substring(i+1).Trim() : null;
+            var numberArgs = found ? 2 : 1;
+            var genericClassTypeComplete = $"{genericClassType}`{numberArgs}";
+
+            var type = GetFriendlyType(genericClassTypeComplete);
+
+            return numberArgs == 1
+                ? type.MakeGenericType(GetFriendlyType(type1))
+                : type.MakeGenericType(GetFriendlyType(type1),GetFriendlyType(type2));
         }
 
         //Helper Classes
@@ -686,7 +756,6 @@ namespace elios.Persist
             Dictionary,
             Convertible
         }
-
         private class PersistMember
         {
             private readonly Lazy<bool> m_isAnonymousType;
@@ -702,7 +771,7 @@ namespace elios.Persist
 
             public PersistMember KeyItemInfo { get; set; }
             public PersistMember ValueItemInfo { get; set; }
-            public string ChildName { get; set; }
+            public string ChildName { get; set; } = ItemKwd;
 
             public List<PersistMember> Children { get; set; } = new List<PersistMember>();
 
@@ -754,7 +823,6 @@ namespace elios.Persist
                 return prp?.PropertyType ?? fld?.FieldType;
             }
         }
-
         private struct MemberAttrib
         {
             public readonly MemberInfo Member;
@@ -766,7 +834,6 @@ namespace elios.Persist
                 Attribute = a;
             }
         }
-
         private sealed class Container<T>
         {
             public T Member { get; set; }

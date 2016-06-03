@@ -53,7 +53,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Archive.cs" />
-    <Compile Include="DynamicNode.cs" />
     <Compile Include="NodeAttribute.cs" />
     <Compile Include="Node.cs" />
     <Compile Include="JsonArchive.cs" />

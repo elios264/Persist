@@ -87,8 +87,8 @@ namespace elios.Persist
         /// <param name="node">The node.</param>
         public static void SaveNode(Stream target, Node node)
         {
-            YamlDocument doc = new YamlDocument(new YamlMappingNode());
-            WriteNode((YamlMappingNode)doc.RootNode, node);
+            YamlDocument doc = new YamlDocument( node.IsContainer ? (YamlNode)new YamlSequenceNode() : new YamlMappingNode());
+            WriteNode(doc.RootNode, node);
 
             using (var writer = new StreamWriter(target, new UTF8Encoding(false), 1024, true))
             {

@@ -123,9 +123,6 @@ namespace elios.Persist
         [SuppressMessage("ReSharper", "RedundantCast")]
         public Node Write(object data, string rootName = null)
         {
-            if (data is DynamicNode)
-                return (Node)( (dynamic)data );
-
             lock (this)
             {
                 WriteMain(data,rootName);
@@ -212,9 +209,6 @@ namespace elios.Persist
         /// <returns></returns>
         public object Read(Node node)
         {
-            if ((CreationType == typeof(object) && AdditionalTypes.Count > 0) || CreationType == typeof(IDictionary<string, object>))
-                return node.AsDynamic();
-
             var firstStep = new Node(node);
             var secondStep = new Node(node);
 
