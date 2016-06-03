@@ -42,21 +42,21 @@ namespace elios.Persist
         /// <param name="data">object to serialize</param>
         /// <param name="format">format to use</param>
         /// <param name="rootName">xml rootname</param>
-        /// <param name="polymorphicTypes">additional serialization types</param>
-        public static void Write(Stream target, object data, ArchiveFormat format = ArchiveFormat.Xml, string rootName = null, Type[] polymorphicTypes = null)
+        /// <param name="additionalTypes">additional serialization types</param>
+        public static void Write(Stream target, object data, ArchiveFormat format = ArchiveFormat.Xml, string rootName = null, params Type[] additionalTypes)
         {
             Archive serializer;
 
             switch (format)
             {
             case ArchiveFormat.Xml: 
-                serializer = new XmlArchive(data.GetType(),polymorphicTypes);
+                serializer = new XmlArchive(data.GetType(),additionalTypes);
                 break;
             case ArchiveFormat.Json:
-                serializer = new JsonArchive(data.GetType(), polymorphicTypes);
+                serializer = new JsonArchive(data.GetType(), additionalTypes);
                 break;
             case ArchiveFormat.Yaml:
-                serializer = new YamlArchive(data.GetType(), polymorphicTypes);
+                serializer = new YamlArchive(data.GetType(), additionalTypes);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(format), format, null);
@@ -71,25 +71,25 @@ namespace elios.Persist
         /// <param name="data">object to serialize</param>
         /// <param name="format">format to use if guess guesses the format you want to use based on the file extension</param>
         /// <param name="rootName">xml rootname</param>
-        /// <param name="polymorphicTypes">additional serialization types</param>
-        public static void Write(string filePath, object data, ArchiveFormat format = ArchiveFormat.Guess, string rootName = null, Type[] polymorphicTypes = null)
+        /// <param name="additionalTypes">additional serialization types</param>
+        public static void Write(string filePath, object data, ArchiveFormat format = ArchiveFormat.Guess, string rootName = null, params Type[] additionalTypes)
         {
             if (format == ArchiveFormat.Guess)
                 format = GuessFormat(filePath);
 
             using (var writeStream = new FileStream(filePath, FileMode.Create))
-                Write(writeStream, data, format, rootName, polymorphicTypes);
+                Write(writeStream, data, format, rootName, additionalTypes);
         }
         /// <summary>
         /// serializes an object to a <see cref="Node"/>
         /// </summary>
         /// <param name="data">object to serialize</param>
         /// <param name="rootName">Name of the root (usually for xml archives)</param>
-        /// <param name="polymorphicTypes">The polymorphic types.</param>
+        /// <param name="additionalTypes">The polymorphic types.</param>
         /// <returns></returns>
-        public static Node Write(object data, string rootName = null, Type[] polymorphicTypes = null)
+        public static Node Write(object data, string rootName = null, params Type[] additionalTypes)
         {
-            return new JsonArchive(data.GetType(),polymorphicTypes).Write(data, rootName);
+            return new JsonArchive(data.GetType(),additionalTypes).Write(data, rootName);
         }
 
         /// <summary>
@@ -98,9 +98,9 @@ namespace elios.Persist
         /// <param name="source">source stream</param>
         /// <param name="type">object type</param>
         /// <param name="format">archive format</param>
-        /// <param name="polymorphicTypes">additional deserialization types</param>
+        /// <param name="additionalTypes">additional deserialization types</param>
         /// <returns>the deserialized object</returns>
-        public static object Read(Stream source, Type type, ArchiveFormat format = ArchiveFormat.Guess, Type[] polymorphicTypes = null)
+        public static object Read(Stream source, Type type, ArchiveFormat format = ArchiveFormat.Guess, params Type[] additionalTypes)
         {
             Archive serializer;
 
@@ -110,13 +110,13 @@ namespace elios.Persist
             switch (format)
             {
                 case ArchiveFormat.Xml:
-                    serializer = new XmlArchive(type, polymorphicTypes);
+                    serializer = new XmlArchive(type, additionalTypes);
                     break;
                 case ArchiveFormat.Json:
-                    serializer = new JsonArchive(type, polymorphicTypes);
+                    serializer = new JsonArchive(type, additionalTypes);
                     break;
                 case ArchiveFormat.Yaml:
-                    serializer = new YamlArchive(type, polymorphicTypes);
+                    serializer = new YamlArchive(type, additionalTypes);
                     break;
                 case ArchiveFormat.Guess:
                     throw new FormatException(nameof(source));
@@ -132,26 +132,26 @@ namespace elios.Persist
         /// <param name="filePath">source file</param>
         /// <param name="type">object type</param>
         /// <param name="format">archive format</param>
-        /// <param name="polymorphicTypes">additional deserialization types</param>
+        /// <param name="additionalTypes">additional deserialization types</param>
         /// <returns>the deserialized object</returns>
-        public static object Read(string filePath, Type type, ArchiveFormat format = ArchiveFormat.Guess, Type[] polymorphicTypes = null)
+        public static object Read(string filePath, Type type, ArchiveFormat format = ArchiveFormat.Guess, params Type[] additionalTypes)
         {
             if (format == ArchiveFormat.Guess)
                 format = GuessFormat(filePath);
 
             using (var readStream = new FileStream(filePath, FileMode.Open))
-                return Read(readStream, type, format, polymorphicTypes);
+                return Read(readStream, type, format, additionalTypes);
         }
         /// <summary>
         /// Deserializes the arhive contained in the specified <see cref="Node"/>
         /// </summary>
         /// <param name="node">The node.</param>
         /// <param name="type">The type this node represents</param>
-        /// <param name="polymorphicTypes">The polymorphic types.</param>
+        /// <param name="additionalTypes">The polymorphic types.</param>
         /// <returns></returns>
-        public static object Read(Node node, Type type, Type[] polymorphicTypes = null)
+        public static object Read(Node node, Type type, params Type[] additionalTypes)
         {
-            return new JsonArchive(type, polymorphicTypes).Read(node);
+            return new JsonArchive(type, additionalTypes).Read(node);
         }
 
         /// <summary>
@@ -160,11 +160,11 @@ namespace elios.Persist
         /// <typeparam name="T"> is the type of the deserialized object</typeparam>
         /// <param name="source">source stream</param>
         /// <param name="format">archive format</param>
-        /// <param name="polymorphicTypes">additional deserialization types</param>
+        /// <param name="additionalTypes">additional deserialization types</param>
         /// <returns></returns>
-        public static T Read<T>(Stream source, ArchiveFormat format = ArchiveFormat.Guess, Type[] polymorphicTypes = null)
+        public static T Read<T>(Stream source, ArchiveFormat format = ArchiveFormat.Guess, params Type[] additionalTypes)
         {
-            return (T)Read(source, typeof(T), format, polymorphicTypes);
+            return (T)Read(source, typeof(T), format, additionalTypes);
         }
         /// <summary>
         /// deserializes an archive
@@ -172,22 +172,22 @@ namespace elios.Persist
         /// <typeparam name="T"> is the type of the deserialized object</typeparam>
         /// <param name="filePath">source file</param>
         /// <param name="format">archive format</param>
-        /// <param name="polymorphicTypes">additional deserialization types</param>
+        /// <param name="additionalTypes">additional deserialization types</param>
         /// <returns></returns>
-        public static T Read<T>(string filePath, ArchiveFormat format = ArchiveFormat.Guess, Type[] polymorphicTypes = null)
+        public static T Read<T>(string filePath, ArchiveFormat format = ArchiveFormat.Guess, params Type[] additionalTypes)
         {
-            return (T)Read(filePath, typeof(T), format, polymorphicTypes);
+            return (T)Read(filePath, typeof(T), format, additionalTypes);
         }
         /// <summary>
         /// Deserializes the arhive contained in the specified <see cref="Node"/>
         /// </summary>
         /// <typeparam name="T">the type this node represents</typeparam>
         /// <param name="node">The node.</param>
-        /// <param name="polymorphicTypes">The polymorphic types.</param>
+        /// <param name="additionalTypes">The polymorphic types.</param>
         /// <returns></returns>
-        public static T Read<T>(Node node, Type[] polymorphicTypes = null)
+        public static T Read<T>(Node node, params Type[] additionalTypes)
         {
-            return (T)Read(node, typeof(T), polymorphicTypes);
+            return (T)Read(node, typeof(T), additionalTypes);
         }
 
         /// <summary>
@@ -201,6 +201,13 @@ namespace elios.Persist
         /// <returns></returns>
         public static string Convert(Stream source, ArchiveFormat newFormat = ArchiveFormat.Xml, ArchiveFormat sourceFormat = ArchiveFormat.Guess, string rootName = null)
         {
+            if (sourceFormat == ArchiveFormat.Guess)
+                sourceFormat = GuessFormat(source);
+
+            if (sourceFormat == newFormat)
+                using (var reader = new StreamReader(source,Encoding.UTF8,true,1024,true))
+                    return reader.ReadToEnd();
+
             var neutralformat = LoadNode(source, sourceFormat);
             neutralformat.Name = rootName ?? neutralformat.Name;
 

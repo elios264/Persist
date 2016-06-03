@@ -41,61 +41,44 @@ namespace elios.Persist
         /// Default serialization provider
         /// </summary>
         public static IFormatProvider Provider = CultureInfo.CurrentCulture;
-        /// <summary>
-        /// Looks for derived types in the current domain so you do not have to deal with manually setting them in the constructor
-        /// </summary>
-        public static bool LookForDerivedTypes = false;
-
-
-        private static readonly Lazy<List<Type>> DomainTypes;
 
         private ObjectIDGenerator m_generator;
         private readonly PersistMember m_mainInfo;
-        private readonly List<Type> m_polymorphicTypes;
+        private readonly Dictionary<Type,PersistMember> m_additionalTypes;
         private readonly Dictionary<Type,Type> m_metaTypes;
 
+        private const string UnknownTypeException = "the type {0} was not expected. Use PersistInclude or the parameter additional types to specify types that are not know statically";
+
         /// <summary>
-        /// Gets the type of the <see cref="Type"/> used to create this archive
+        /// Gets the <see cref="Type"/> used to create this archive
         /// </summary>
         public Type CreationType => m_mainInfo.Type;
-
-        static Archive()
+        /// <summary>
+        /// Gets the additional types used to create this archive.
+        /// </summary>
+        /// <value>
+        /// The additional types.
+        /// </value>
+        public IReadOnlyCollection<Type> AdditionalTypes
         {
-            DomainTypes = new Lazy<List<Type>>(() =>
-            {
-                var d = AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic).SelectMany(a => a.GetExportedTypes()).Where(type => !type.IsAbstract).ToList();
-                d.TrimExcess();
-                return d;
-            });
+            get { return (IReadOnlyCollection<Type>)( (object)m_additionalTypes.Keys ); }
         }
 
         /// <summary>
         /// Base class used to serialize and deserialize Archives
         /// </summary>
         /// <param name="mainType">type of the object you are going to read or write</param>
-        /// <param name="polymorphicTypes">polymorphicTypes that have to be considered when writing or reading</param>
-        protected Archive(Type mainType, IEnumerable<Type> polymorphicTypes)
+        /// <param name="additionalTypes">additionalTypes that have to be considered when writing or reading</param>
+        protected Archive(Type mainType, params Type[] additionalTypes)
         {
-            m_polymorphicTypes = new List<Type>(polymorphicTypes ?? Enumerable.Empty<Type>());
             m_metaTypes = Assembly.GetAssembly(mainType)
                                   .GetTypes()
                                   .Where(type => Attribute.IsDefined(type, typeof(MetadataTypeAttribute)))
                                   .ToDictionary(type => type.GetCustomAttribute<MetadataTypeAttribute>().MetadataClassType, type => type);
 
-            switch (GetPersistType(mainType))
-            {
-            case PersistType.Complex:
-                m_mainInfo = GeneratePersistMember(mainType);
-                break;
-            case PersistType.List:
-            case PersistType.Dictionary:
-                var info = GeneratePersistMember(typeof(Container<>).MakeGenericType(mainType));
-                m_mainInfo = info.Children.Single();
-                break;
-            case PersistType.Convertible:
-                throw new SerializationException("the root of the data to serialize can't implement IConvertible");
-            }
-         }
+            m_additionalTypes = additionalTypes.ToDictionary(type => type, GeneratePersistMember);
+            m_mainInfo = GeneratePersistMember(mainType);
+        }
         /// <summary>
         /// Initializes a new instance of the <see cref="Archive"/> class using the metadata from other serializer.
         /// </summary>
@@ -103,7 +86,7 @@ namespace elios.Persist
         protected Archive(Archive archive)
         {
             m_mainInfo = archive.m_mainInfo;
-            m_polymorphicTypes = archive.m_polymorphicTypes;
+            m_additionalTypes = archive.m_additionalTypes;
             m_metaTypes = archive.m_metaTypes;
         }
 
@@ -119,10 +102,8 @@ namespace elios.Persist
                 throw new SerializationException($"the type {data.GetType().Name} does not match the constructed type of this serializer ({m_mainInfo.Type})");
 
             m_generator = new ObjectIDGenerator();
-
             m_mainInfo.Name = rootName ?? data.GetType().Name;
             Write(m_mainInfo, data);
-
             m_generator = null;
         }
         /// <summary>
@@ -131,10 +112,7 @@ namespace elios.Persist
         /// <returns>returns the deserialized object</returns>
         protected object ReadMain()
         {
-            object result = null;
-            Read(m_mainInfo, ref result);
-
-            return result;
+            return Read(m_mainInfo);
         }
         /// <summary>
         /// Call this method on a derived type to perform the second step on the deserialization of an archive that uses references to solve them
@@ -184,8 +162,7 @@ namespace elios.Persist
         /// A nested object begins to be written
         /// </summary>
         /// <param name="name">object name</param>
-        /// <param name="isContainer">is the object an array or list or dictionary</param>
-        protected abstract void BeginWriteObject(string name, bool isContainer = false);
+        protected abstract void BeginWriteObject(string name);
 
         /// <summary>
         /// Ends reading a nested object
@@ -231,236 +208,226 @@ namespace elios.Persist
         /// <param name="name">filter string children name</param>
         /// <returns></returns>
         protected abstract int GetObjectChildrenCount(string name);
+        /// <summary>
+        /// Gets or sets a value indicating whether the current object needs to be a container
+        /// </summary>
+        /// <value>
+        /// <c>true</c> if the current object needs to be a container otherwise, <c>false</c>.
+        /// </value>
+        protected abstract bool IsCurrentObjectContainer { get; set; }
+
 
         //Helper Methods
         private void Resolve(PersistMember persistInfo, object owner)
-        {
-            switch (persistInfo.PersistType)
+        {   //Handle polymorphic
+            Type valueType;
+            if (( valueType = owner.GetType() ) != persistInfo.Type)
             {
-            case PersistType.Convertible:
-                break;
-            case PersistType.List:
-                if (BeginReadObject(persistInfo.Name))
-                {
-                    var count = GetObjectChildrenCount(persistInfo.ValueItemInfo.Name);
+                PersistMember persistTypeInfo = m_additionalTypes[valueType];
 
-                    for (int i = 0; i < count; i++)
+                persistTypeInfo.Name = persistInfo.Name;
+                persistTypeInfo.ChildName = persistInfo.ChildName;
+                persistTypeInfo.IsReference = persistInfo.IsReference;
+                persistInfo = persistTypeInfo;
+            }
+
+            //Handle convertbile
+            if (persistInfo.PersistType == PersistType.Convertible)
+                return;
+
+            //handle List, Dictionary, Complex
+            if (BeginReadObject(persistInfo.Name))
+                using (new Utils.OnDispose(() => EndReadObject(null) ))
+                {
+                    switch (persistInfo.PersistType)
                     {
+                    case PersistType.List:
+                        int count = GetObjectChildrenCount(persistInfo.ValueItemInfo.Name);
+                        for (int i = 0; i < count; i++)
+                            if (persistInfo.ValueItemInfo.IsReference)
+                            {
+                                BeginReadObject(persistInfo.ValueItemInfo.Name);
+                                ((IList)owner).Add(ReadReference(AddressKwd));
+                                EndReadObject(null);
+                            }
+                            else
+                                Resolve(persistInfo.ValueItemInfo, ( (IList)owner )[i]);
+                        break;
+                    case PersistType.Dictionary:
                         if (persistInfo.ValueItemInfo.IsReference)
                         {
-                            BeginReadObject(persistInfo.ValueItemInfo.Name);
-                            ( (IList)owner ).Add(ReadReference(AddressKwd));
-                            EndReadObject(null);
+                            count = GetObjectChildrenCount(persistInfo.ChildName);
+                            for (int i = 0; i < count; i++)
+                            {
+                                BeginReadObject(persistInfo.ChildName);
+                                ( (IDictionary)owner ).Add(Read(persistInfo.KeyItemInfo), ReadReference(persistInfo.ValueItemInfo.Name));
+                                EndReadObject(null);
+                            }
                         }
                         else
+                            foreach (DictionaryEntry subItem in (IDictionary)owner)
+                            {
+                                BeginReadObject(persistInfo.ChildName);
+                                Resolve(persistInfo.KeyItemInfo, subItem.Key);
+                                Resolve(persistInfo.ValueItemInfo, subItem.Value);
+                                EndReadObject(null);
+                            }
+                        break;
+                    case PersistType.Complex:
+                        foreach (var child in persistInfo.Children)
                         {
-                            Resolve(persistInfo.ValueItemInfo, ( (IList)owner )[i]);
+                            if (child.IsReference)
+                                child.SetValue(owner, ReadReference(child.Name));
+                            else
+                                Resolve(child,child.GetValue(owner));
                         }
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
                     }
-                    EndReadObject(null);
                 }
-                break;
-            case PersistType.Dictionary:
-                if (BeginReadObject(persistInfo.Name))
-                {
-                    if (persistInfo.ValueItemInfo.IsReference)
-                    {
-                        var count = GetObjectChildrenCount(persistInfo.ChildName);
-                        for (int i = 0; i < count; i++)
-                        {
-                            BeginReadObject(persistInfo.ChildName);
-                            object keyValue = null;
-                            Read(persistInfo.KeyItemInfo, ref keyValue);
-                            object childValue = ReadReference(persistInfo.ValueItemInfo.Name);
-                            EndReadObject(null);
-
-                            ( (IDictionary)owner ).Add(keyValue, childValue);
-                        }
-                    }
-                    else
-                    {
-                        foreach (DictionaryEntry subItem in (IDictionary)owner)
-                        {
-                            BeginReadObject(persistInfo.ChildName);
-                            Resolve(persistInfo.KeyItemInfo, subItem.Key);
-                            Resolve(persistInfo.ValueItemInfo, subItem.Value);
-                            EndReadObject(null);
-                        }
-                    }
-                    EndReadObject(null);
-                }
-                break;
-            case PersistType.Complex:
-                if (BeginReadObject(persistInfo.Name))
-                {
-                    foreach (var child in persistInfo.Children.Where(child => child.DeclaringType.IsInstanceOfType(owner)))
-                    {
-                        if (child.IsReference)
-                            child.SetValue(owner, ReadReference(child.Name));
-                        else
-                            Resolve(child, child.GetValue(owner));
-                    }
-
-                    EndReadObject(null);
-                }
-                break;
-            default:
-                throw new ArgumentOutOfRangeException();
-            }
         }
-        private void Read(PersistMember persistInfo, ref object owner)
+        private object Read(PersistMember persistInfo, object owner = null)
         {
-            if (persistInfo.PersistType == PersistType.Convertible || BeginReadObject(persistInfo.Name))
+            if (persistInfo.PersistType != PersistType.Convertible && !BeginReadObject(persistInfo.Name))
+                return owner;
+
+            //Create object
+            if (owner == null && persistInfo.PersistType != PersistType.Convertible)
+                owner = CreateInstanceForCurrentObject(persistInfo);
+
+            //Handle Polymorphic
+            Type valueType = owner?.GetType() ?? persistInfo.Type;
+            bool isPolymorphic = false;
+
+            if (!persistInfo.IsReference && valueType != persistInfo.Type)
             {
-                if (owner == null && persistInfo.PersistType != PersistType.Convertible)
-                {
-                    if (persistInfo.IsAnonymousType)
-                        owner = FormatterServices.GetUninitializedObject(persistInfo.Type);
-                    else
-                    {
-                        var classType = (string)ReadValue(ClassKwd, typeof(string));
-                        var typeToCreate = classType == null ? persistInfo.Type : m_polymorphicTypes.First(type => type.Name == classType);
+                PersistMember persistTypeInfo = m_additionalTypes[valueType];
 
-                        owner = persistInfo.RunConstructor ? Activator.CreateInstance(typeToCreate) : FormatterServices.GetUninitializedObject(typeToCreate);
-                    }
-                }
+                persistTypeInfo.Name = persistInfo.Name;
+                persistTypeInfo.ChildName = persistInfo.ChildName;
+                persistTypeInfo.IsReference = persistInfo.IsReference;
+                persistInfo = persistTypeInfo;
+                isPolymorphic = true;
+            }
 
-
-                int count;
+            ////Handle Convertible, Complex, List, Dictionary
+            if (!persistInfo.IsReference && ( !( persistInfo.ValueItemInfo?.IsReference ?? false ) ))
+            {
                 switch (persistInfo.PersistType)
                 {
                 case PersistType.Convertible:
-                    owner = ReadValue(persistInfo.Name, persistInfo.Type);
-                    return;
-                case PersistType.List:
-                    if (persistInfo.ValueItemInfo.IsReference)
-                        break;
-
-                    count = GetObjectChildrenCount(persistInfo.ValueItemInfo.Name);
-                    for (int i = 0; i < count; i++)
+                    if (isPolymorphic || ( ( CreationType == persistInfo.Type || IsCurrentObjectContainer ) && BeginReadObject(persistInfo.Name) ))
                     {
-                        object childValue = null;
-
-                        if (persistInfo.ValueItemInfo.PersistType == PersistType.Convertible)
-                        {
-                            BeginReadObject(persistInfo.ValueItemInfo.Name);
-                            childValue = ReadValue(ValueKwd, persistInfo.ValueItemInfo.Type);
-                            EndReadObject(null);
-                        }
-                        else
-                        {
-                            Read(persistInfo.ValueItemInfo, ref childValue);
-                        }
-
-                        ( (IList)owner ).Add(childValue);
+                        owner = ReadValue(ValueKwd, persistInfo.Type);
+                        break;
                     }
+                    return ReadValue(persistInfo.Name, persistInfo.Type);
+                case PersistType.List:
+                    int count = GetObjectChildrenCount(persistInfo.ValueItemInfo.Name);
+                    for (int i = 0; i < count; i++)
+                        ( (IList)owner ).Add(Read(persistInfo.ValueItemInfo));
                     break;
                 case PersistType.Dictionary:
-                    if (persistInfo.ValueItemInfo.IsReference)
-                        break;
-
                     count = GetObjectChildrenCount(persistInfo.ChildName);
                     for (int i = 0; i < count; i++)
                     {
-                        object keyValue = null;
-                        object childValue = null;
-
                         BeginReadObject(persistInfo.ChildName);
-                        Read(persistInfo.KeyItemInfo, ref keyValue);
-                        Read(persistInfo.ValueItemInfo, ref childValue);
+                        ( (IDictionary)owner ).Add(Read(persistInfo.KeyItemInfo), Read(persistInfo.ValueItemInfo));
                         EndReadObject(null);
-
-                        ( (IDictionary)owner ).Add(keyValue, childValue);
                     }
                     break;
                 case PersistType.Complex:
-                    if (persistInfo.IsReference)
-                        break;
-
-                    Type ownerType = owner.GetType();
-                    foreach (var child in persistInfo.Children.Where(child => child.DeclaringType.IsAssignableFrom(ownerType)))
+                    foreach (var childInfo in persistInfo.Children)
                     {
-                        object childValue = child.GetValue(owner);
-
-                        Read(child, ref childValue);
-                        child.SetValue?.Invoke(owner, childValue);
+                        var childValue = Read(childInfo, childInfo.GetValue(owner));
+                        childInfo.SetValue?.Invoke(owner, childValue);
                     }
                     break;
-                default:
-                    throw new ArgumentOutOfRangeException();
                 }
-
-
-                EndReadObject(owner);
             }
+
+            EndReadObject(owner);
+            return owner;
         }
         private void Write(PersistMember persistInfo, object persistValue)
         {
-            if (persistValue == null)
-                return;
-
-            if (persistInfo.IsReference)
-            {
-                WriteReference(persistInfo.Name, UidOf(persistValue));
-                return;
-            }
-
-            switch (persistInfo.PersistType)
-            {
-            case PersistType.Convertible:
-                WriteValue(persistInfo.Name, persistValue);
-                break;
-            case PersistType.List:
-                BeginWriteObject(persistInfo.Name, true);
-
-                foreach (var subItem in (IEnumerable)persistValue)
+            if (persistInfo.IsReference) //Handle references
+                if (IsCurrentObjectContainer)
                 {
-                    if (persistInfo.ValueItemInfo.PersistType == PersistType.Convertible)
-                    {
-                        BeginWriteObject(persistInfo.ValueItemInfo.Name);
-                        WriteValue(ValueKwd, (IConvertible)subItem);
-                        EndWriteObject(-1);
-                    }
-                    else if (persistInfo.ValueItemInfo.IsReference)
-                    {
-                        BeginWriteObject(persistInfo.ValueItemInfo.Name);
-                        WriteReference(AddressKwd, UidOf(subItem));
-                        EndWriteObject(-1);
-                    }
-                    else
-                        Write(persistInfo.ValueItemInfo, subItem);
+                    BeginWriteObject(persistInfo.Name);
+                    WriteReference(AddressKwd, UidOf(persistValue));
+                    EndWriteObject(-1);
+                }
+                else
+                    WriteReference(persistInfo.Name, UidOf(persistValue));
+            else
+            { //Handle Polymorphic
+                Type valueType;
+                bool isPolymorphic = false;
+
+                if (( valueType = persistValue.GetType() ) != persistInfo.Type)
+                {
+                    PersistMember persistTypeInfo;
+
+                    if (!m_additionalTypes.TryGetValue(valueType, out persistTypeInfo))
+                        throw new InvalidOperationException(string.Format(UnknownTypeException, valueType));
+
+                    persistTypeInfo.Name = persistInfo.Name;
+                    persistTypeInfo.ChildName = persistInfo.ChildName;
+                    persistTypeInfo.IsReference = persistInfo.IsReference;
+                    persistInfo = persistTypeInfo;
+                    isPolymorphic = true;
                 }
 
-                EndWriteObject(UidOf(persistValue));
-                break;
-            case PersistType.Dictionary:
-                BeginWriteObject(persistInfo.Name, true);
-
-                    foreach (DictionaryEntry subItem in (IDictionary)persistValue)
+                //Handle Convertible
+                if (persistInfo.PersistType == PersistType.Convertible)
+                {
+                    if (isPolymorphic || CreationType == persistInfo.Type || IsCurrentObjectContainer)
                     {
-                        BeginWriteObject(persistInfo.ChildName);
-                        Write(persistInfo.KeyItemInfo, subItem.Key);
-                        Write(persistInfo.ValueItemInfo, subItem.Value);
-                        EndWriteObject(-1);
+                        BeginWriteObject(persistInfo.Name);
+                        if (isPolymorphic)
+                            WriteValue(ClassKwd, valueType.GetFriendlyName());
+                        WriteValue(ValueKwd, persistValue);
+                        EndWriteObject(UidOf(persistValue));
                     }
+                    else
+                        WriteValue(persistInfo.Name, persistValue);
+                }
+                else //Handle Complex, List, Dictionary
+                    using (new Utils.OnDispose(() => EndWriteObject(UidOf(persistValue))))
+                    {
+                        BeginWriteObject(persistInfo.Name);
 
-                    EndWriteObject(UidOf(persistValue));
-                break;
-            case PersistType.Complex:
-                BeginWriteObject(persistInfo.Name);
+                        if (isPolymorphic)
+                            WriteValue(ClassKwd, valueType.GetFriendlyName());
 
-                if (persistValue.GetType() != persistInfo.Type)
-                    WriteValue(ClassKwd, persistValue.GetType().Name);
-
-                foreach (var child in persistInfo.Children.Where(child => child.DeclaringType.IsInstanceOfType(persistValue)))
-                    Write(child, child.GetValue(persistValue));
-
-                EndWriteObject(UidOf(persistValue));
-                break;
-            default:
-                throw new ArgumentOutOfRangeException();
+                        switch (persistInfo.PersistType)
+                        {
+                        case PersistType.Complex:
+                            foreach (var memberInfo in persistInfo.Children)
+                                Write(memberInfo, memberInfo.GetValue(persistValue));
+                            break;
+                        case PersistType.List:
+                            IsCurrentObjectContainer = true;
+                            foreach (var elementValue in (IEnumerable)persistValue)
+                                Write(persistInfo.ValueItemInfo, elementValue);
+                            break;
+                        case PersistType.Dictionary:
+                            IsCurrentObjectContainer = true;
+                            foreach (DictionaryEntry elementValue in (IDictionary)persistValue)
+                                {
+                                    BeginWriteObject(persistInfo.ChildName);
+                                    Write(persistInfo.KeyItemInfo, elementValue.Key);
+                                    Write(persistInfo.ValueItemInfo, elementValue.Value);
+                                    EndWriteObject(-1);
+                                }
+                            break;
+                        }
+                    }
             }
         }
+
         private long UidOf(object o)
         {
             bool firstTime;
@@ -468,8 +435,24 @@ namespace elios.Persist
         }
         private PersistMember GeneratePersistMember(Type type)
         {
-            var persistMember = new PersistMember(type);
-            var context = new Stack<PersistMember>(new[] { persistMember });
+            PersistMember persistMember;
+
+            switch (GetPersistType(type))
+            {
+            case PersistType.Convertible:
+                return new PersistMember(type);
+            case PersistType.Complex:
+                persistMember = new PersistMember(type);
+                break;
+            case PersistType.List:
+            case PersistType.Dictionary:
+                persistMember = new PersistMember(typeof(Container<>).MakeGenericType(type));
+                break;
+            default:
+                throw new ArgumentOutOfRangeException();
+            }
+
+            var context = new Stack<PersistMember>(new[] {persistMember});
             var definedMembers = new Dictionary<Type, List<PersistMember>>();
 
             while (context.Count > 0)
@@ -501,177 +484,198 @@ namespace elios.Persist
 
                     switch (childInfo.PersistType)
                     {
-                        case PersistType.Convertible: //Handle convertible cases
-                            if (memberInfo.Attribute.IsReference)
-                                throw new SerializationException($"Cannot have a reference [Persist(IsReference=true)] on the simple type: {childInfo.Type} in property {memberInfo.Member.Name}!");
-                            break;
-                        case PersistType.List: //Handle list cases
-                            {
-                                childInfo.IsReference = false;
-                                childInfo.RunConstructor = true;
+                    case PersistType.List: //Handle list cases
+                    {
+                        childInfo.IsReference = false;
+                        childInfo.RunConstructor = true;
 
-                                var valueType = childInfo.Type.GetEnumeratedType();
-                                var valueItemInfo = new PersistMember(valueType)
-                                {
-                                    IsReference = memberInfo.Attribute.IsReference,
-                                    RunConstructor = memberInfo.Attribute.RunConstructor,
-                                    Name = memberInfo.Attribute.ChildName ?? (valueType.IsGenericType ? ItemKwd : valueType.Name)
-                                };
-                                childInfo.ValueItemInfo = valueItemInfo;
+                        var valueType = childInfo.Type.GetEnumeratedType();
+                        var valueItemInfo = new PersistMember(valueType)
+                        {
+                            IsReference = memberInfo.Attribute.IsReference,
+                            RunConstructor = memberInfo.Attribute.RunConstructor,
+                            Name = memberInfo.Attribute.ChildName ?? ( valueType.IsGenericType
+                                ? ItemKwd
+                                : valueType.Name )
+                        };
+                        childInfo.ValueItemInfo = valueItemInfo;
 
-                                List<PersistMember> typeMembers;
-                                if (definedMembers.TryGetValue(valueType, out typeMembers))
-                                {
-                                    valueItemInfo.Children = typeMembers;
-                                }
-                                else if (GetPersistType(valueItemInfo.Type) == PersistType.Complex)
-                                {
-                                    context.Push(valueItemInfo);
-                                    definedMembers.Add(valueType, valueItemInfo.Children);
-                                }
-                            }
-                            break;
-                        case PersistType.Dictionary: //Handle dictionary cases
-                            {
-                                childInfo.IsReference = false;
-                                childInfo.RunConstructor = true;
+                        List<PersistMember> typeMembers;
+                        if (definedMembers.TryGetValue(valueType, out typeMembers))
+                        {
+                            valueItemInfo.Children = typeMembers;
+                        }
+                        else if (GetPersistType(valueItemInfo.Type) == PersistType.Complex)
+                        {
+                            context.Push(valueItemInfo);
+                            definedMembers.Add(valueType, valueItemInfo.Children);
+                        }
+                    }
+                        break;
+                    case PersistType.Dictionary: //Handle dictionary cases
+                    {
+                        childInfo.IsReference = false;
+                        childInfo.RunConstructor = true;
 
-                                var dictypes = childInfo.Type.GetDictionaryTypes();
+                        var dictypes = childInfo.Type.GetDictionaryTypes();
 
-                                var keyItemInfo = new PersistMember(dictypes.Item1)
-                                {
-                                    IsReference = false,
-                                    Name = memberInfo.Attribute.KeyName ?? (dictypes.Item1.IsGenericType ? KeyKwd : dictypes.Item1.Name)
-                                };
-                                var valueItemInfo = new PersistMember(dictypes.Item2)
-                                {
-                                    IsReference = memberInfo.Attribute.IsReference,
-                                    RunConstructor = memberInfo.Attribute.RunConstructor,
-                                    Name = memberInfo.Attribute.ValueName ?? (dictypes.Item2.IsGenericType ? ValueKwd : dictypes.Item2.Name)
-                                };
+                        var keyItemInfo = new PersistMember(dictypes.Item1)
+                        {
+                            IsReference = false,
+                            Name = memberInfo.Attribute.KeyName ?? ( dictypes.Item1.IsGenericType
+                                ? KeyKwd
+                                : dictypes.Item1.Name )
+                        };
+                        var valueItemInfo = new PersistMember(dictypes.Item2)
+                        {
+                            IsReference = memberInfo.Attribute.IsReference,
+                            RunConstructor = memberInfo.Attribute.RunConstructor,
+                            Name = memberInfo.Attribute.ValueName ?? ( dictypes.Item2.IsGenericType
+                                ? ValueKwd
+                                : dictypes.Item2.Name )
+                        };
 
-                                childInfo.ChildName = memberInfo.Attribute.ChildName ?? ItemKwd;
-                                childInfo.KeyItemInfo = keyItemInfo;
-                                childInfo.ValueItemInfo = valueItemInfo;
+                        childInfo.ChildName = memberInfo.Attribute.ChildName ?? ItemKwd;
+                        childInfo.KeyItemInfo = keyItemInfo;
+                        childInfo.ValueItemInfo = valueItemInfo;
 
-                                List<PersistMember> typeMembers;
-                                if (definedMembers.TryGetValue(dictypes.Item2, out typeMembers))
-                                {
-                                    valueItemInfo.Children = typeMembers;
-                                }
-                                else if (GetPersistType(valueItemInfo.Type) == PersistType.Complex)
-                                {
-                                    context.Push(valueItemInfo);
-                                    definedMembers.Add(dictypes.Item2, valueItemInfo.Children);
-                                }
+                        List<PersistMember> typeMembers;
+                        if (definedMembers.TryGetValue(dictypes.Item2, out typeMembers))
+                        {
+                            valueItemInfo.Children = typeMembers;
+                        }
+                        else if (GetPersistType(valueItemInfo.Type) == PersistType.Complex)
+                        {
+                            context.Push(valueItemInfo);
+                            definedMembers.Add(dictypes.Item2, valueItemInfo.Children);
+                        }
 
-                                if (definedMembers.TryGetValue(dictypes.Item1, out typeMembers))
-                                {
-                                    keyItemInfo.Children = typeMembers;
-                                }
-                                else if (GetPersistType(keyItemInfo.Type) == PersistType.Complex)
-                                {
-                                    context.Push(keyItemInfo);
-                                    definedMembers.Add(dictypes.Item1, keyItemInfo.Children);
-                                }
-                            }
-                            break;
+                        if (definedMembers.TryGetValue(dictypes.Item1, out typeMembers))
+                        {
+                            keyItemInfo.Children = typeMembers;
+                        }
+                        else if (GetPersistType(keyItemInfo.Type) == PersistType.Complex)
+                        {
+                            context.Push(keyItemInfo);
+                            definedMembers.Add(dictypes.Item1, keyItemInfo.Children);
+                        }
+                    }
+                        break;
+                    }
+
+                    if (( childInfo.IsReference && childInfo.PersistType == PersistType.Convertible ) || ( ( childInfo.ValueItemInfo?.IsReference ?? false ) && childInfo.ValueItemInfo.PersistType == PersistType.Convertible ))
+                    {
+                        throw new SerializationException($"Cannot have a reference [Persist(IsReference=true)] on the simple type: {childInfo.Type} in property {memberInfo.Member.Name}!");
                     }
                 }
             }
 
-            if (Utils.HasCircularDependency(new[] { persistMember }, member => member.Children.Where(m => !m.IsReference)))
+            if (Utils.HasCircularDependency(new[] {persistMember}, member => member.Children.Where(m => !m.IsReference)))
             {
                 throw new SerializationException("Could not initialize serializer because a circular dependency has been detected please use [Persist(IsReference = true)] to avoid this exception");
             }
 
-            return persistMember;
+            switch (GetPersistType(type))
+            {
+            case PersistType.Complex:
+                return persistMember;
+            case PersistType.List:
+            case PersistType.Dictionary:
+                return persistMember.Children.Single();
+            default:
+                throw new ArgumentOutOfRangeException();
+            }
         }
         private IEnumerable<MemberAttrib> GetElegibleMembers(Type mainType)
         {
             const BindingFlags searchMode = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
 
-            if (!mainType.IsSealed && LookForDerivedTypes)
+            if (!mainType.IsSealed)
             {
-                foreach (var derived in DomainTypes.Value.Concat(Assembly.GetAssembly(mainType).GetTypes().Where(type => !type.IsPublic && !type.IsAbstract)).Where(type => type != mainType && mainType.IsAssignableFrom(type)))
-                    m_polymorphicTypes.Add(derived);
-            }
-
-            var elegibleMembers = Enumerable.Empty<MemberAttrib>();
-            var allDerivedTypes = mainType.IsSealed
-                ? Enumerable.Empty<Type>()
-                : m_polymorphicTypes.Where(mainType.IsAssignableFrom).SelectMany(dT =>
-                {
-                    var typesTillMain = new List<Type>();
-
-                    while (dT != mainType)
+                PersistIncludeAttribute additional;
+                if (m_additionalTypes != null && ( additional = mainType.GetCustomAttribute<PersistIncludeAttribute>() ) != null)
+                    foreach (var additionalType in additional.AdditionalTypes.Where(t => !m_additionalTypes.ContainsKey(t)))
                     {
-                        typesTillMain.Add(dT);
-                        dT = dT.BaseType;
+                        m_additionalTypes.Add(additionalType, null); //To avoid recursion
+                        m_additionalTypes[additionalType] = GeneratePersistMember(additionalType);
                     }
-
-                    return typesTillMain;
-                });
-
-            foreach (var memberType in new[] {mainType}.Concat(allDerivedTypes))
-            {
-                var currentMemberType = memberType;
-                var isAnonymous = currentMemberType.IsAnonymousType();
-
-                var searchFlags = currentMemberType == mainType ? searchMode : searchMode | BindingFlags.DeclaredOnly;
-
-                Type metaType;
-                bool isMetaType = m_metaTypes.TryGetValue(currentMemberType, out metaType);
-
-                var realFields = new FieldInfo[0];
-                var realProperties = new PropertyInfo[0];
-
-
-                if (isMetaType)
-                {
-                    realFields = currentMemberType.GetFields(searchFlags);
-                    realProperties = currentMemberType.GetProperties(searchFlags);
-
-                    currentMemberType = metaType;
-                }
-                else if (isAnonymous)
-                {
-                    realFields = currentMemberType.GetFields(searchFlags);
-                }
-
-                var propertyMembers = currentMemberType.GetProperties(searchFlags).Select(info => new
-                {
-                    p = info,
-                    attr = info.GetCustomAttribute<PersistAttribute>()
-                }).Where(_ => !isAnonymous).Where(info => { return GetPersistType(PersistMember.GetMemberType(info.p)) == PersistType.Convertible ? info.p.SetMethod != null && info.p.SetMethod.IsPublic && ( info.attr == null || info.attr.Ignore == false ) : ( info.p.GetMethod.IsPublic ? info.attr == null || info.attr.Ignore == false : info.attr != null && info.attr.Ignore == false ); }).Select(info => new MemberAttrib(isMetaType ? realProperties.Single(p => p.Name == info.p.Name) : info.p, info.attr ?? new PersistAttribute(info.p.Name)));
-
-                IEnumerable<MemberAttrib> fieldMembers;
-                if (isAnonymous)
-                {
-                    fieldMembers = currentMemberType.GetProperties(searchFlags).Select(info => new MemberAttrib(realFields.First(fi => fi.Name.Contains($"<{info.Name}>")), new PersistAttribute(info.Name)));
-                }
-                else
-                {
-                    fieldMembers = currentMemberType.GetFields(searchFlags).Select(info => new
-                    {
-                        f = info,
-                        attr = info.GetCustomAttribute<PersistAttribute>()
-                    }).Where(info => info.attr != null && info.attr.Ignore == false).Select(info => new MemberAttrib(isMetaType ? realFields.Single(p => p.Name == info.f.Name) : info.f, info.attr));
-                }
-                elegibleMembers = elegibleMembers.Concat(propertyMembers.Concat(fieldMembers));
             }
 
-            return elegibleMembers;
+            Type metaType;
+            bool isMetaType = m_metaTypes.TryGetValue(mainType, out metaType);
+            bool isAnonymous = mainType.IsAnonymousType();
+            var realFields = new FieldInfo[0];
+            var realProperties = new PropertyInfo[0];
+
+
+            if (isMetaType)
+            {
+                realFields = mainType.GetFields(searchMode);
+                realProperties = mainType.GetProperties(searchMode);
+
+                mainType = metaType;
+            }
+            else if (isAnonymous)
+            {
+                realFields = mainType.GetFields(searchMode);
+            }
+
+            var propertyMembers = mainType.GetProperties(searchMode).Select(info => new
+            {
+                p = info,
+                attr = info.GetCustomAttribute<PersistAttribute>()
+            }).Where(_ => !isAnonymous).Where(info => GetPersistType(PersistMember.GetMemberType(info.p)) == PersistType.Convertible
+                ? info.p.SetMethod != null && info.p.SetMethod.IsPublic && ( info.attr == null || info.attr.Ignore == false )
+                : ( info.p.GetMethod.IsPublic
+                    ? info.attr == null || info.attr.Ignore == false
+                    : info.attr != null && info.attr.Ignore == false )).Select(info => new MemberAttrib(isMetaType
+                        ? realProperties.Single(p => p.Name == info.p.Name)
+                        : info.p, info.attr ?? new PersistAttribute(info.p.Name)));
+
+            IEnumerable<MemberAttrib> fieldMembers;
+            if (isAnonymous)
+            {
+                fieldMembers = mainType.GetProperties(searchMode).Select(info => new MemberAttrib(realFields.First(fi => fi.Name.Contains($"<{info.Name}>")), new PersistAttribute(info.Name)));
+            }
+            else
+            {
+                fieldMembers = mainType.GetFields(searchMode).Select(info => new
+                {
+                    f = info,
+                    attr = info.GetCustomAttribute<PersistAttribute>()
+                }).Where(info => info.attr != null && info.attr.Ignore == false).Select(info => new MemberAttrib(isMetaType
+                    ? realFields.Single(p => p.Name == info.f.Name)
+                    : info.f, info.attr));
+            }
+
+            return propertyMembers.Concat(fieldMembers);
         }
         private static PersistType GetPersistType(Type type)
         {
             return typeof(IConvertible).IsAssignableFrom(type)
                 ? PersistType.Convertible
-                : ( typeof(IDictionary).IsAssignableFrom(type)
+                : ( typeof(IDictionary).IsAssignableFrom(type) // || type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>))
                     ? PersistType.Dictionary
                     : ( typeof(IEnumerable).IsAssignableFrom(type)
                         ? PersistType.List
                         : PersistType.Complex ) );
+        }
+        private object CreateInstanceForCurrentObject(PersistMember info)
+        {
+            if (info.IsAnonymousType)
+                return FormatterServices.GetUninitializedObject(info.Type);
+
+            string classType = (string)ReadValue(ClassKwd, typeof(string));
+            Type typeToCreate = classType == null
+                ? info.Type
+                : m_additionalTypes.Keys.FirstOrDefault(t => t.GetFriendlyName() == classType);
+
+            if (typeToCreate != null)
+                return info.RunConstructor
+                    ? Activator.CreateInstance(typeToCreate)
+                    : FormatterServices.GetUninitializedObject(typeToCreate);
+
+            throw new InvalidOperationException(string.Format(UnknownTypeException, classType));
         }
 
         //Helper Classes
@@ -682,6 +686,7 @@ namespace elios.Persist
             Dictionary,
             Convertible
         }
+
         private class PersistMember
         {
             private readonly Lazy<bool> m_isAnonymousType;
@@ -689,7 +694,6 @@ namespace elios.Persist
             public string Name { get; set; }
 
             public Type Type { get; }
-            public Type DeclaringType { get; }
             public PersistType PersistType { get; }
 
             public bool IsAnonymousType => m_isAnonymousType.Value;
@@ -718,12 +722,13 @@ namespace elios.Persist
                 FieldInfo fld = info as FieldInfo;
 
                 Type = prp?.PropertyType ?? fld?.FieldType;
-                DeclaringType = info.DeclaringType;
                 PersistType = GetPersistType(Type);
 
                 m_isAnonymousType = new Lazy<bool>(() => Type.IsAnonymousType());
 
-                GetValue = owner => prp != null ? prp.GetValue(owner) : fld.GetValue(owner);
+                GetValue = owner => prp != null
+                    ? prp.GetValue(owner)
+                    : fld.GetValue(owner);
 
                 if (prp != null && prp.CanWrite == false)
                     return;
@@ -749,6 +754,7 @@ namespace elios.Persist
                 return prp?.PropertyType ?? fld?.FieldType;
             }
         }
+
         private struct MemberAttrib
         {
             public readonly MemberInfo Member;
@@ -760,6 +766,7 @@ namespace elios.Persist
                 Attribute = a;
             }
         }
+
         private sealed class Container<T>
         {
             public T Member { get; set; }

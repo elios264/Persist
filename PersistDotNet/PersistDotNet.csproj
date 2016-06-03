@@ -59,6 +59,7 @@
     <Compile Include="JsonArchive.cs" />
     <Compile Include="PersistAttribute.cs" />
     <Compile Include="ArchiveUtils.cs" />
+    <Compile Include="PersistIncludeAttribute.cs" />
     <Compile Include="TreeArchive.cs" />
     <Compile Include="Utils.cs" />
     <Compile Include="XmlArchive.cs" />

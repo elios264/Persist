@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml;
@@ -18,8 +17,8 @@ namespace elios.Persist
         /// Initializes <see cref="XmlArchive"/> that reads archives of the specified type
         /// </summary>
         /// <param name="type"></param>
-        /// <param name="polymorphicTypes"></param>
-        public XmlArchive(Type type, IEnumerable<Type> polymorphicTypes = null) : base(type, polymorphicTypes)
+        /// <param name="additionalTypes"></param>
+        public XmlArchive(Type type, params Type[] additionalTypes) : base(type, additionalTypes)
         {
         }
         /// <summary>
@@ -92,7 +91,7 @@ namespace elios.Persist
                 ParseNode(xmlNode, childNode);
             }
 
-            curNode.IsContainer = curNode.Attributes.Count == 0 && curNode.Nodes.Count > 0 && curNode.Nodes.Select(_ => _.Name).Distinct().Count() == 1;
+            curNode.IsContainer = curNode.Attributes.All(a => a.Name == ClassKwd) && curNode.Nodes.Count > 0 && curNode.Nodes.Select(_ => _.Name).Distinct().Count() == 1;
 
         }
         internal static void WriteNode(XmlDocument doc, XmlNode xmlNode, Node node)

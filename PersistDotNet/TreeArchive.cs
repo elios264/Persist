@@ -64,8 +64,8 @@ namespace elios.Persist
         /// abstract class constructor
         /// </summary>
         /// <param name="type"></param>
-        /// <param name="polymorphicTypes"></param>
-        protected TreeArchive(Type type, IEnumerable<Type> polymorphicTypes) : base(type, polymorphicTypes)
+        /// <param name="additionalTypes"></param>
+        protected TreeArchive(Type type, params Type[] additionalTypes) : base(type, additionalTypes)
         {
             m_context = new Stack<Node>();
             m_writeReferences = new HashSet<long>();
@@ -136,22 +136,20 @@ namespace elios.Persist
             }
         }
 
-
         /// <summary>
         /// A nested object begins to be written
         /// </summary>
         /// <param name="name">object name</param>
-        /// <param name="isContainer">is the object an array or list or dictionary</param>
-        protected override void BeginWriteObject(string name, bool isContainer = false)
+        protected override void BeginWriteObject(string name)
         {
             if (m_context.Count == 0)
             {
-                m_root = new Node { Name = name, IsContainer = isContainer};
+                m_root = new Node { Name = name};
                 m_context.Push(m_root);
             }
             else if (!string.IsNullOrEmpty(name))
             {
-                var element = new Node { Name = name, IsContainer = isContainer};
+                var element = new Node { Name = name};
                 Current.Nodes.Add(element);
                 m_context.Push(element);
             }
@@ -214,7 +212,7 @@ namespace elios.Persist
         /// <returns></returns>
         public object Read(Node node)
         {
-            if (CreationType == typeof(object) || CreationType== typeof(IDictionary<string,object>))
+            if ((CreationType == typeof(object) && AdditionalTypes.Count > 0) || CreationType == typeof(IDictionary<string, object>))
                 return node.AsDynamic();
 
             var firstStep = new Node(node);
@@ -223,19 +221,15 @@ namespace elios.Persist
             lock (this)
             {
                 m_root = firstStep;
-
                 var result = ReadMain();
                 if (m_readReferences.Count > 0) //Resolve if there are pending references
                 {
                     m_root = secondStep;
-
                     ResolveMain(result);
-
                     m_readReferences.Clear();
                 }
 
                 m_root = null;
-
                 return result;
             }
         }
@@ -334,6 +328,18 @@ namespace elios.Persist
             return Current.IsContainer 
                 ? Current.Nodes.Count
                 : Current.Nodes.Count(e => e.Name == name);
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the current object needs to be a container
+        /// </summary>
+        /// <value>
+        /// <c>true</c> if the current object needs to be a container otherwise, <c>false</c>.
+        /// </value>
+        protected override bool IsCurrentObjectContainer
+        {
+            get { return Current.IsContainer; }
+            set { Current.IsContainer = value; }
         }
 
         private void ResolveWriteReferences()

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
@@ -20,8 +19,8 @@ namespace elios.Persist
         /// Initializes <see cref="YamlArchive"/> that reads archives of the specified type
         /// </summary>
         /// <param name="type"></param>
-        /// <param name="polymorphicTypes"></param>
-        public YamlArchive(Type type, IEnumerable<Type> polymorphicTypes = null) : base(type, polymorphicTypes)
+        /// <param name="additionalTypes"></param>
+        public YamlArchive(Type type, params Type[] additionalTypes ) : base(type, additionalTypes)
         {
         }
         /// <summary>
@@ -135,7 +134,7 @@ namespace elios.Persist
                 {
                     ((YamlMappingNode)yamlNode).Add(new YamlScalarNode(attribute.Name), new YamlScalarNode(attribute.Value));
                 }
-            else if (node.Attributes.Count > 0)
+            else if (node.Attributes.Any(a => a.Name != ClassKwd))
                 throw new InvalidOperationException("arrays cannot contain attributes");
 
             foreach (var e in node.Nodes)

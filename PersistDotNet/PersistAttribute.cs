@@ -2,6 +2,7 @@ using System;
 
 namespace elios.Persist
 {
+
     /// <summary>
     /// Preferences used to personalize an object serialization and deserialization members
     /// </summary>

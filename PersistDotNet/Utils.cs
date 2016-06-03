@@ -59,6 +59,20 @@ namespace elios.Persist
             throw new ArgumentException($"{type} is not a dictionary");
         }
 
+        public static string GetFriendlyName(this Type type)
+        {
+            var friendlyName = type.Name;
+            if (!type.IsGenericType) return friendlyName;
+
+            var iBacktick = friendlyName.IndexOf('`');
+            if (iBacktick > 0) friendlyName = friendlyName.Remove(iBacktick);
+
+            var genericParameters = type.GetGenericArguments().Select(x => x.GetFriendlyName());
+            friendlyName += "<" + string.Join(", ", genericParameters) + ">";
+
+            return friendlyName;
+        }
+
         public static bool HasCircularDependency<T>(IEnumerable<T> source, Func<T, IEnumerable<T>> getDependencies)
         {
             return source.Any(item => Visit(item, getDependencies, new Dictionary<T, bool>()));

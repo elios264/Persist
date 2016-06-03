@@ -12,7 +12,7 @@ namespace Examples
         public string Name { get; set; }
         public DateTime ReleaseDate { get; set; }
 
-        [Persist(ValueName = "Likes")]
+        [Persist(ValueName = "Likes", ChildName = "Genre")]
         public Dictionary<Genre,int> Genres { get; set; }
 
         public static Movie BadBoys => new Movie { Name = "Bad boys", ReleaseDate = DateTime.Now , Genres = new Dictionary<Genre, int> { { Genre.Action, 3 }, { Genre.Sfi, 21 } } };
@@ -101,6 +101,7 @@ namespace Examples
             ArchiveUtils.Write(classroomFile, c);
 
 
+
             //Deserialize
             var classroom1 = (Classroom)xmlArchive.Read(classroomFile);
             //or
@@ -109,10 +110,8 @@ namespace Examples
 
 
             //Polymorphic types
-            Archive.LookForDerivedTypes = false;
-            var yamlArchiveWithTypes = new YamlArchive(typeof(Automata), new[] { typeof(CommandTransition), typeof(ConditionTransition) });
-            //or
-            Archive.LookForDerivedTypes = true;
+            var yamlArchiveWithExplicitTypes = new YamlArchive(typeof(Automata), typeof(CommandTransition), typeof(ConditionTransition));
+            //or using in the subclass needing them [PersistInclude(typeof(CommandTransition),typeof(ConditionTransition))]
             var yamlArchive = new YamlArchive(typeof(Automata));
 
             var automataFile = "automata.yaml";

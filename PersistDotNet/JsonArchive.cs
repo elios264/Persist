@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
@@ -18,8 +16,8 @@ namespace elios.Persist
         /// Initializes <see cref="JsonArchive"/> that reads archives of the specified type
         /// </summary>
         /// <param name="type"></param>
-        /// <param name="polymorphicTypes"></param>
-        public JsonArchive(Type type, IEnumerable<Type> polymorphicTypes = null) : base(type, polymorphicTypes)
+        /// <param name="additionalTypes"></param>
+        public JsonArchive(Type type, params Type[] additionalTypes) : base(type, additionalTypes)
         {
         }
         /// <summary>

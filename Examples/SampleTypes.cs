@@ -81,6 +81,8 @@ namespace Examples
         }
     }
 
+    // to allow Persist to recognize additional types when serializing/deserializing
+    [PersistInclude(typeof(CommandTransition),typeof(ConditionTransition))]
     public class Transition
     {
         public string Name { get; set; }
