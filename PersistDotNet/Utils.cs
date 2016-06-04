@@ -75,7 +75,7 @@ namespace elios.Persist
             {
                 visited[item] = true;
 
-                if (getDependencies(item).Any(dependency => Visit(dependency, getDependencies, visited)))
+                if (getDependencies(item).Any(dependency => Visit<T>(dependency, getDependencies, visited)))
                     return true;
 
                 visited[item] = false;
@@ -86,15 +86,17 @@ namespace elios.Persist
 
         public static bool IsAnonymousType(this Type type)
         {
-            if (type == null)
-                throw new ArgumentNullException(nameof(type));
-
-            // HACK: The only way to detect anonymous types right now.
             return type.GetTypeInfo().IsGenericType
                    && (type.GetTypeInfo().Attributes & TypeAttributes.NotPublic) == TypeAttributes.NotPublic
                    && (type.Name.StartsWith("<>", StringComparison.OrdinalIgnoreCase) || type.Name.StartsWith("VB$", StringComparison.OrdinalIgnoreCase))
                    && (type.Name.Contains("AnonymousType") || type.Name.Contains("AnonType"))
                    && type.GetTypeInfo().GetCustomAttributes(typeof(CompilerGeneratedAttribute)).Any();
+        }
+
+        public static void Assert(bool condition = false, string ifFail = null, [CallerMemberName] string caller = null)
+        {
+            if (!condition)
+                throw new InvalidOperationException(ifFail ?? $"Invalid operation in method {caller}");
         }
 
         public class OnDispose : IDisposable

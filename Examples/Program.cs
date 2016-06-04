@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Dynamic;
 using System.Windows;
 using elios.Persist;
 
@@ -29,7 +28,7 @@ namespace Examples
             var movieFile = "badboys.movie";
 
             //Serialize
-            archive.Write(movieFile,Movie.BadBoys);
+            archive.Write(movieFile, Movie.BadBoys);
             //or
             ArchiveUtils.Write(movieFile, Movie.BadBoys, ArchiveFormat.Json);
 
@@ -38,20 +37,19 @@ namespace Examples
             //or 
             var bboysMovie2 = ArchiveUtils.Read<Movie>(movieFile);
             //or
-            var bboysMovie5 = ArchiveUtils.LoadNode(movieFile, ArchiveFormat.Json);
-            // bboysMovie5.AsDynamic() if you want dynamic 
+            var bboysMovie3 = ArchiveUtils.LoadNode(movieFile, ArchiveFormat.Json);
 
             //Serializing & Deserializing runtime objects
-            XmlArchive arc = new XmlArchive((Type)null);
+            XmlArchive arc = new XmlArchive(null);
 
             arc.Write("runtimeObject.xml", new Dictionary<string, object>
             {
                 {"Genre", Movie.Genre.Action },
                 {"Amount", 2323 },
                 {"Producer", Automata.SampleAutomata() },
-            },"Dictionary");
+            }, "Dictionary");
 
-            var obje =  new XmlArchive((Type)null).Read("runtimeObject.xml");
+            var obje = new XmlArchive(null).Read("runtimeObject.xml");
 
 
             //Cyclic references

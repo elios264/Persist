@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
 using YamlDotNet.RepresentationModel;
+using static elios.Persist.Utils;
 
 namespace elios.Persist
 {
@@ -15,6 +16,10 @@ namespace elios.Persist
     /// <seealso cref="elios.Persist.TreeArchive" />
     public sealed class YamlArchive : TreeArchive
     {
+        private const string PolymorphicContainerKeyword = "items";
+        private const string ErrorAnonymous = "YamlArchive/JsonArchive cannot serialize anonymous containers aka [Persist(\"\")]";
+
+
         /// <summary>
         /// Initializes <see cref="YamlArchive"/> that reads archives of the specified type
         /// </summary>
@@ -23,14 +28,6 @@ namespace elios.Persist
         public YamlArchive(Type type, params Type[] additionalTypes ) : base(type, additionalTypes)
         {
         }
-        /// <summary>
-        /// Initializes a new instance of the <see cref="YamlArchive"/> class.
-        /// </summary>
-        /// <param name="archive">The archive.</param>
-        public YamlArchive(Archive archive) : base(archive)
-        {
-        }
-
 
         /// <summary>
         /// Writes a node to the <see cref="Stream" />
@@ -58,27 +55,23 @@ namespace elios.Persist
         /// <returns></returns>
         public static Node LoadNode(Stream source)
         {
-            YamlDocument doc;
-
-            using (var reader = new StreamReader(source, Encoding.UTF8, true, 1024, true))
-            {
-                var stream = new YamlStream();
-                stream.Load(reader);
-
-                doc = stream.Documents.Single();
-            }
-
-            var mainNode = new Node {Name = string.Empty };
-
             try
             {
-                ParseNode(doc.RootNode, mainNode);
+                YamlDocument yamlDoc;
+
+                using (var reader = new StreamReader(source, Encoding.UTF8, true, 1024, true))
+                {
+                    var stream = new YamlStream();
+                    stream.Load(reader);
+                    yamlDoc = stream.Documents.Single();
+                }
+
+                return ParseNode((YamlMappingNode)yamlDoc.RootNode, new Node { Name = string.Empty });
             }
             catch (Exception)
             {
                 throw new SerializationException("invalid json/yaml document");
             }
-            return mainNode;
         }
         /// <summary>
         /// writes a <see cref="Node"/> to a yaml stream
@@ -87,83 +80,124 @@ namespace elios.Persist
         /// <param name="node">The node.</param>
         public static void SaveNode(Stream target, Node node)
         {
-            YamlDocument doc = new YamlDocument( node.IsContainer ? (YamlNode)new YamlSequenceNode() : new YamlMappingNode());
-            WriteNode(doc.RootNode, node);
+            var mainYamlNode = new YamlMappingNode();
+            var yamlDoc = new YamlDocument(mainYamlNode);
+
+            WriteNode(mainYamlNode, node);
 
             using (var writer = new StreamWriter(target, new UTF8Encoding(false), 1024, true))
-            {
-                var stream = new YamlStream(doc);
-                stream.Save(writer, false);
-            }
+                new YamlStream(yamlDoc).Save(writer, false);
         }
 
-        private static void ParseNode(YamlNode curYamlNode, Node curNode)
+        private static Node ParseNode(YamlMappingNode yamlNode, Node node)
         {
-            if (curYamlNode is YamlMappingNode)
+            if (yamlNode.Children.Count == 2)
             {
-                foreach (var pair in ((YamlMappingNode)curYamlNode).Children)
-                {
-                    if (pair.Value is YamlScalarNode)
-                        curNode.Attributes.Add(new NodeAttribute(( (YamlScalarNode) pair.Key ).Value, ( (YamlScalarNode) pair.Value ).Value));
-                    else
-                    {
-                        var childNode = new Node {Name = pair.Key.ToString() };
+                var keys = new YamlNode[2];
+                yamlNode.Children.Keys.CopyTo(keys,0);
 
-                        curNode.Nodes.Add(childNode);
-                        ParseNode(pair.Value,childNode);
-                    }
+                if (((YamlScalarNode)keys[0]).Value == ClassKwd && ((YamlScalarNode)keys[1]).Value == PolymorphicContainerKeyword)
+                {
+                    var values = new YamlNode[2];
+                    yamlNode.Children.Values.CopyTo(values,0);
+
+                    node.IsContainer = true;
+                    node.Attributes.Add(new NodeAttribute(ClassKwd,((YamlScalarNode)values[0]).Value));
+
+                    return ParseNode((YamlSequenceNode)values[1], node);
                 }
+            }
+
+            foreach (var mapping in yamlNode.Children)
+            {
+                string key = ((YamlScalarNode)mapping.Key).Value;
+
+                if (mapping.Value is YamlScalarNode)
+                {
+                    node.Attributes.Add(new NodeAttribute(key,mapping.Value.ToString()));
+                }
+                else if (mapping.Value is YamlMappingNode)
+                {
+                    node.Nodes.Add(ParseNode((YamlMappingNode)mapping.Value, new Node { Name = key }));
+                }
+                else if (mapping.Value is YamlSequenceNode)
+                {
+                    node.Nodes.Add(ParseNode((YamlSequenceNode)mapping.Value, new Node { Name = key, IsContainer = true }));
+                }
+            }
+
+            return node;
+        }
+        private static Node ParseNode(YamlSequenceNode yamlNode, Node node)
+        {
+            foreach (var child in yamlNode)
+            {
+                if (child is YamlMappingNode)
+                {
+                    node.Nodes.Add(ParseNode((YamlMappingNode)child,new Node {Name = string.Empty} ));
+                }
+                else
+                {
+                    node.Nodes.Add(ParseNode((YamlSequenceNode)child, new Node { Name = string.Empty, IsContainer = true }));
+                }
+            }
+            return node;
+        }
+        internal static void WriteNode(YamlMappingNode yamlNode, Node node)
+        {
+            if (node.IsContainer)
+            {
+                if (node.Attributes.Count == 1)
+                    yamlNode.Add(node.Attributes[0].Name, node.Attributes[0].Value);
+
+                var sequence = new YamlSequenceNode();
+
+                yamlNode.Add(PolymorphicContainerKeyword, sequence);
+                WriteNode(sequence, node);
             }
             else
             {
-                curNode.IsContainer = true;
+                node.Attributes.ForEach(a => yamlNode.Add(a.Name,a.Value));
 
-                foreach (var node in ((YamlSequenceNode)curYamlNode).Children)
+                foreach (var childNode in node.Nodes)
                 {
-                    var childNode = new Node {Name = string.Empty };
-
-                    curNode.Nodes.Add(childNode);
-                    ParseNode(node, childNode);
+                    if (!childNode.IsContainer || (childNode.Attributes.Count == 1 && childNode.Attributes[0].Name == ClassKwd))
+                    {
+                        var n = new YamlMappingNode();
+                        WriteNode(n, childNode);
+                        yamlNode.Add(childNode.Name,n);
+                    }
+                    else
+                    {
+                        var n = new YamlSequenceNode();
+                        WriteNode(n, childNode);
+                        yamlNode.Add(childNode.Name,n);
+                    }
                 }
             }
         }
-        internal static void WriteNode(YamlNode yamlNode, Node node)
+        private static void WriteNode(YamlSequenceNode yamlNode, Node node)
         {
-            if (yamlNode is YamlMappingNode)
-                foreach (var attribute in node.Attributes)
-                {
-                    ((YamlMappingNode)yamlNode).Add(new YamlScalarNode(attribute.Name), new YamlScalarNode(attribute.Value));
-                }
-            else if (node.Attributes.Any(a => a.Name != ClassKwd))
-                throw new InvalidOperationException($"YamlArchive/JsonArchive cannot serialize anonymous containers aka [Persist(\"\")]");
+            Assert((node.Attributes.Count == 1 && node.Attributes[0].Name == ClassKwd) || node.Attributes.Count == 0, ErrorAnonymous);
 
-            foreach (var e in node.Nodes)
+            string name = null;
+            foreach (var childNode in node.Nodes)
             {
-                YamlNode childNode;
+                Assert((name = name ?? childNode.Name) == childNode.Name, ErrorAnonymous);
 
-                if (e.IsContainer)
+                if (!childNode.IsContainer || (childNode.Attributes.Count == 1 && childNode.Attributes[0].Name == ClassKwd))
                 {
-                    childNode = new YamlSequenceNode();
-                    WriteNode(childNode, e);
+                    var n = new YamlMappingNode();
+                    WriteNode(n, childNode);
+                    yamlNode.Add(n);
                 }
                 else
                 {
-                    childNode = new YamlMappingNode();
-                    WriteNode(childNode, e);
+                    var n = new YamlSequenceNode();
+                    WriteNode(n,childNode);
+                    yamlNode.Add(n);
                 }
-
-                if (yamlNode is YamlMappingNode)
-                {
-                    var mNode = ((YamlMappingNode)yamlNode);
-
-                    if (mNode.Children.ContainsKey(new YamlScalarNode(e.Name)))
-                        throw new InvalidOperationException($"YamlArchive/JsonArchive cannot serialize anonymous containers aka [Persist(\"\")]");
-                    mNode.Add(new YamlScalarNode(e.Name), childNode);
-                }
-                else
-                    ((YamlSequenceNode)yamlNode).Add(childNode);
             }
         }
-
     }
 }

@@ -20,13 +20,6 @@ namespace elios.Persist
         public JsonArchive(Type type, params Type[] additionalTypes) : base(type, additionalTypes)
         {
         }
-        /// <summary>
-        /// Initializes a new instance of the <see cref="JsonArchive"/> class class using the metadata from other serializer.
-        /// </summary>
-        /// <param name="archive">The archive.</param>
-        public JsonArchive(Archive archive) : base(archive)
-        {        
-        }
 
         /// <summary>
         /// Writes a node to a json <see cref="Stream"/>

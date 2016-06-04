@@ -21,13 +21,6 @@ namespace elios.Persist
         public XmlArchive(Type type, params Type[] additionalTypes) : base(type, additionalTypes)
         {
         }
-        /// <summary>
-        /// Initializes a new instance of the <see cref="XmlArchive"/> class class using the metadata from other serializer.
-        /// </summary>
-        /// <param name="archive">The archive.</param>
-        public XmlArchive(Archive archive) : base(archive)
-        {
-        }
 
         /// <summary>
         /// Writes a node to the <see cref="Stream" />
@@ -79,7 +72,7 @@ namespace elios.Persist
             return mainNode;
         }
 
-        internal static void ParseNode(XmlNode curXmlNode, Node curNode)
+        private static void ParseNode(XmlNode curXmlNode, Node curNode)
         {
             curNode.Attributes.AddRange(curXmlNode.Attributes.Cast<XmlAttribute>().Select(attribute => new NodeAttribute(attribute.Name,attribute.Value)));
 
@@ -94,7 +87,7 @@ namespace elios.Persist
             curNode.IsContainer = curNode.Attributes.All(a => a.Name == ClassKwd) && curNode.Nodes.Count > 0 && curNode.Nodes.Select(_ => _.Name).Distinct().Count() == 1;
 
         }
-        internal static void WriteNode(XmlDocument doc, XmlNode xmlNode, Node node)
+        private static void WriteNode(XmlDocument doc, XmlNode xmlNode, Node node)
         {
             foreach (var attribute in node.Attributes)
             {
@@ -111,7 +104,6 @@ namespace elios.Persist
                 WriteNode(doc, childNode, e);
             }
         }
-
     }
 
 }

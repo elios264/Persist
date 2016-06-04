@@ -71,15 +71,7 @@ namespace elios.Persist
             m_writeReferences = new HashSet<long>();
             m_readReferences = new Dictionary<string, object>();
         }
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TreeArchive"/> class.
-        /// </summary>
-        /// <param name="archive">The archive.</param>
-        protected TreeArchive(Archive archive) : base(archive)
-        {
-        }
-
-
+ 
         /// <summary>
         /// Writes a node to the <see cref="Stream"/>
         /// </summary>
@@ -179,10 +171,8 @@ namespace elios.Persist
         /// <param name="data">value</param>
         protected override void WriteValue(string name, object data)
         {
-            if (name != ClassKwd || !( Current is ParentNode ))
-                Current.Attributes.Add(new NodeAttribute(name, (IConvertible)data));
-            else
-                throw new InvalidOperationException($"Inside Object: {{{Current.Name}}}. Anonymous containers ( aka [Persist(\"\")] ) are not allowed to be polymorphic");
+            Utils.Assert(name != ClassKwd || !(Current is ParentNode), $"Inside Object: {{{Current.Name}}}. Anonymous containers ( aka [Persist(\"\")] ) are not allowed to be polymorphic");
+            Current.Attributes.Add(new NodeAttribute(name, (IConvertible)data));
         }
 
         /// <summary>
@@ -305,7 +295,6 @@ namespace elios.Persist
             var id = Current.Attributes.FirstOrDefault(attr => attr.Name == name)?.Value;
 
             object reference;
-
             if (m_readReferences.TryGetValue(id, out reference))
             {
                 return reference;
@@ -361,10 +350,7 @@ namespace elios.Persist
                 }
             }
 
-            if (m_writeReferences.Count > 0)
-            {
-                throw new SerializationException("unresolved reference");
-            }
+            Utils.Assert(m_writeReferences.Count == 0,"unresolved reference when writing please make sure to save as value all the referenced objects somewhere else");
         }
     }
 }
