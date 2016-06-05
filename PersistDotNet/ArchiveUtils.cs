@@ -249,7 +249,7 @@ namespace elios.Persist
                 XmlArchive.SaveNode(target,node);
                 break;
             case ArchiveFormat.Json:
-                JsonArchive.SaveNode(target, node);
+                JsonArchive.SaveNode(target, node, true);
                 break;
             case ArchiveFormat.Yaml:
                 YamlArchive.SaveNode(target, node);
