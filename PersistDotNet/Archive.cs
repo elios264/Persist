@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.IO;
@@ -39,14 +40,17 @@ namespace elios.Persist
         /// </summary>
         public static string AddressKwd = "id";
         /// <summary>
-        /// Default serialization provider
+        /// Default serialization Culture
         /// </summary>
-        public static IFormatProvider Provider = CultureInfo.CurrentCulture;
+        public static CultureInfo Culture = CultureInfo.CurrentCulture;
 
         private readonly bool m_isDynamic;
         private ObjectIDGenerator m_generator;
         private readonly PersistInfo m_mainInfo;
-        private static readonly Dictionary<Type,Type> MetaTypes;
+        /// <summary>
+        /// Metatypes mapping
+        /// </summary>
+        protected static readonly IReadOnlyDictionary<Type,Type> MetaTypes;
         private readonly Dictionary<Type,PersistInfo> m_additionalTypes;
 
         /// <summary>
@@ -210,6 +214,90 @@ namespace elios.Persist
 
 
         //Helper Methods
+        private void Write(PersistInfo persistInfo, object persistValue)
+        {
+            if (persistValue == null) return;
+
+            if (persistInfo.IsReference) //Handle references
+                if (IsCurrentObjectContainer)
+                {
+                    BeginWriteObject(persistInfo.Name);
+                    WriteReference(AddressKwd, UidOf(persistValue));
+                    EndWriteObject(-1);
+                }
+                else
+                    WriteReference(persistInfo.Name, UidOf(persistValue));
+            else
+            { //Handle Polymorphic
+                Type valueType;
+                bool isPolymorphic = false;
+
+                if (( valueType = persistValue.GetType() ) != persistInfo.Type)
+                {
+                    PersistInfo persistTypeInfo;
+
+                    if (!m_additionalTypes.TryGetValue(valueType, out persistTypeInfo))
+                    {
+                        if (m_isDynamic)
+                            m_additionalTypes.Add(valueType, persistTypeInfo = PersistInfoFor(valueType));
+                        else
+                            throw new InvalidOperationException($"The type {valueType} was not expected.create a Archive(null) to use runtime discovery or use PersistIncludeAttribute or the parameter additional types to specify types that are not know statically");
+                    }
+
+                    persistTypeInfo.Name = persistInfo.Name;
+                    persistTypeInfo.ChildName = persistInfo.ChildName;
+                    persistTypeInfo.IsReference = persistInfo.IsReference;
+                    persistInfo = persistTypeInfo;
+                    isPolymorphic = true;
+                }
+
+                //Handle Convertible
+                if (persistInfo.PersistType == PersistType.Convertible)
+                {
+                    if (isPolymorphic || CreationType == persistInfo.Type || IsCurrentObjectContainer)
+                    {
+                        BeginWriteObject(persistInfo.Name);
+                        if (isPolymorphic)
+                            WriteValue(ClassKwd, GetFriendlyName(valueType));
+                        WriteValue(ValueKwd, persistValue);
+                        EndWriteObject(UidOf(persistValue));
+                    }
+                    else
+                        WriteValue(persistInfo.Name, persistValue);
+                }
+                else //Handle Complex, List, Dictionary
+                    using (new OnDispose(() => EndWriteObject(UidOf(persistValue))))
+                    {
+                        BeginWriteObject(persistInfo.Name);
+
+                        if (isPolymorphic)
+                            WriteValue(ClassKwd, GetFriendlyName(valueType));
+
+                        switch (persistInfo.PersistType)
+                        {
+                        case PersistType.Complex:
+                            foreach (var memberInfo in persistInfo.Children)
+                                Write(memberInfo, memberInfo.GetValue(persistValue));
+                            break;
+                        case PersistType.List:
+                            IsCurrentObjectContainer = true;
+                            foreach (var elementValue in (IEnumerable)persistValue)
+                                Write(persistInfo.ValueItemInfo, elementValue);
+                            break;
+                        case PersistType.Dictionary:
+                            IsCurrentObjectContainer = true;
+                            foreach (DictionaryEntry elementValue in (IDictionary)persistValue)
+                            {
+                                BeginWriteObject(persistInfo.ChildName);
+                                Write(persistInfo.KeyItemInfo, elementValue.Key);
+                                Write(persistInfo.ValueItemInfo, elementValue.Value);
+                                EndWriteObject(-1);
+                            }
+                            break;
+                        }
+                    }
+            }
+        }
         private void Resolve(PersistInfo persistInfo, object owner)
         {   //Handle polymorphic
             Type valueType;
@@ -341,90 +429,6 @@ namespace elios.Persist
 
             EndReadObject(owner);
             return owner;
-        }
-        private void Write(PersistInfo persistInfo, object persistValue)
-        {
-            if (persistValue == null) return;
-
-            if (persistInfo.IsReference) //Handle references
-                if (IsCurrentObjectContainer)
-                {
-                    BeginWriteObject(persistInfo.Name);
-                    WriteReference(AddressKwd, UidOf(persistValue));
-                    EndWriteObject(-1);
-                }
-                else
-                    WriteReference(persistInfo.Name, UidOf(persistValue));
-            else
-            { //Handle Polymorphic
-                Type valueType;
-                bool isPolymorphic = false;
-
-                if (( valueType = persistValue.GetType() ) != persistInfo.Type)
-                {
-                    PersistInfo persistTypeInfo;
-
-                    if (!m_additionalTypes.TryGetValue(valueType, out persistTypeInfo))
-                    {
-                        if (m_isDynamic)
-                            m_additionalTypes.Add(valueType, persistTypeInfo = PersistInfoFor(valueType));
-                        else
-                            throw new InvalidOperationException($"The type {valueType} was not expected.create a Archive(null) to use runtime discovery or use PersistIncludeAttribute or the parameter additional types to specify types that are not know statically");
-                    }
-
-                    persistTypeInfo.Name = persistInfo.Name;
-                    persistTypeInfo.ChildName = persistInfo.ChildName;
-                    persistTypeInfo.IsReference = persistInfo.IsReference;
-                    persistInfo = persistTypeInfo;
-                    isPolymorphic = true;
-                }
-
-                //Handle Convertible
-                if (persistInfo.PersistType == PersistType.Convertible)
-                {
-                    if (isPolymorphic || CreationType == persistInfo.Type || IsCurrentObjectContainer)
-                    {
-                        BeginWriteObject(persistInfo.Name);
-                        if (isPolymorphic)
-                            WriteValue(ClassKwd, GetFriendlyName(valueType));
-                        WriteValue(ValueKwd, persistValue);
-                        EndWriteObject(UidOf(persistValue));
-                    }
-                    else
-                        WriteValue(persistInfo.Name, persistValue);
-                }
-                else //Handle Complex, List, Dictionary
-                    using (new OnDispose(() => EndWriteObject(UidOf(persistValue))))
-                    {
-                        BeginWriteObject(persistInfo.Name);
-
-                        if (isPolymorphic)
-                            WriteValue(ClassKwd, GetFriendlyName(valueType));
-
-                        switch (persistInfo.PersistType)
-                        {
-                        case PersistType.Complex:
-                            foreach (var memberInfo in persistInfo.Children)
-                                Write(memberInfo, memberInfo.GetValue(persistValue));
-                            break;
-                        case PersistType.List:
-                            IsCurrentObjectContainer = true;
-                            foreach (var elementValue in (IEnumerable)persistValue)
-                                Write(persistInfo.ValueItemInfo, elementValue);
-                            break;
-                        case PersistType.Dictionary:
-                            IsCurrentObjectContainer = true;
-                            foreach (DictionaryEntry elementValue in (IDictionary)persistValue)
-                                {
-                                    BeginWriteObject(persistInfo.ChildName);
-                                    Write(persistInfo.KeyItemInfo, elementValue.Key);
-                                    Write(persistInfo.ValueItemInfo, elementValue.Value);
-                                    EndWriteObject(-1);
-                                }
-                            break;
-                        }
-                    }
-            }
         }
 
         private long UidOf(object o)
@@ -627,7 +631,9 @@ namespace elios.Persist
         }
         private static PersistType GetPersistType(Type type)
         {
-            return typeof(IConvertible).IsAssignableFrom(type)
+            Type metaType;
+
+            return typeof(IConvertible).IsAssignableFrom(type) || (MetaTypes.TryGetValue(type, out metaType) ? Attribute.IsDefined(metaType,typeof(TypeConverterAttribute)) : Attribute.IsDefined(type, typeof(TypeConverterAttribute)))
                 ? PersistType.Convertible
                 : (typeof(IDictionary).IsAssignableFrom(type) // || type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>))
                     ? PersistType.Dictionary

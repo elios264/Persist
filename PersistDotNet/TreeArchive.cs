@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
@@ -161,7 +162,7 @@ namespace elios.Persist
         /// <param name="id">id of the reference</param>
         protected override void WriteReference(string name, long id)
         {
-            Current.Attributes.Add(new NodeAttribute(name, id));
+            Current.Attributes.Add(new NodeAttribute(name, id.ToString(Culture)));
             m_writeReferences.Add(id);
         }
         /// <summary>
@@ -172,7 +173,20 @@ namespace elios.Persist
         protected override void WriteValue(string name, object data)
         {
             Utils.Assert(name != ClassKwd || !(Current is ParentNode), $"Inside Object: {{{Current.Name}}}. Anonymous containers ( aka [Persist(\"\")] ) are not allowed to be polymorphic");
-            Current.Attributes.Add(new NodeAttribute(name, (IConvertible)data));
+
+            if (data is IConvertible)
+                Current.Attributes.Add(new NodeAttribute(name, ((IConvertible)data).ToString(Culture)));
+            else
+            {
+                Type metaType;
+                Type dataType = data.GetType();
+
+                Current.Attributes.Add(
+                    new NodeAttribute(name, (string)TypeDescriptor.GetConverter(MetaTypes.TryGetValue(dataType, out metaType)
+                        ? metaType
+                        : dataType).ConvertTo(null, Culture, data, typeof(string))));
+
+            }
         }
 
         /// <summary>
@@ -277,9 +291,15 @@ namespace elios.Persist
 
             if (value != null)
             {
-                return typeof (Enum).IsAssignableFrom(type) 
-                    ? Enum.Parse(type, value) 
-                    : Convert.ChangeType(value, type,Provider);
+                if (typeof(Enum).IsAssignableFrom(type))
+                    return Enum.Parse(type, value);
+                if (typeof(IConvertible).IsAssignableFrom(type))
+                    return Convert.ChangeType(value, type, Culture);
+
+                Type metaType;
+                return TypeDescriptor.GetConverter(MetaTypes.TryGetValue(type, out metaType)
+                    ? metaType
+                    : type).ConvertFrom(null, Culture, value);
             }
 
             return null;
@@ -340,7 +360,7 @@ namespace elios.Persist
 
                 if (e.Id > 0 && m_writeReferences.Contains(e.Id))
                 {
-                    e.Attributes.Add(new NodeAttribute(AddressKwd, e.Id));
+                    e.Attributes.Add(new NodeAttribute(AddressKwd, e.Id.ToString(Culture)));
                     m_writeReferences.Remove(e.Id);
                 }
 

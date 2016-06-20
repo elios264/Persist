@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Windows;
 using elios.Persist;
 
 namespace Examples
 {
+    //[TypeConverter(typeof(MovieConverter))]
     public class Movie
     {
         public enum Genre { Action, Comedy, Terror, Thriller, Romantic, Sfi, Boring }
@@ -17,6 +20,10 @@ namespace Examples
 
         public static Movie BadBoys => new Movie { Name = "Bad boys", ReleaseDate = DateTime.Now , Genres = new Dictionary<Genre, int> { { Genre.Action, 3 }, { Genre.Sfi, 21 } } };
     }
+
+    //[MetadataType(typeof(Movie))]
+    //[TypeConverter(typeof(MovieConverter))]
+    public class MovieMeta {}
 
 
     class Program

@@ -12,6 +12,8 @@
     <description>$description$</description>
     <releaseNotes>
 	
+		- Support for TypeConverters
+
 Can Serialize/Deserialize:
 	- Arbitrary custom types, native types, anonymous types, enums, IDictionary, IList, IConvertible
 	- Multiply and possibly cyclical references to objects

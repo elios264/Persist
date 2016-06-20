@@ -21,10 +21,10 @@ namespace elios.Persist
         /// </summary>
         /// <param name="name"></param>
         /// <param name="value"></param>
-        public NodeAttribute(string name, IConvertible value)
+        public NodeAttribute(string name, string value)
         {
             Name = name;
-            Value = value.ToString(Archive.Provider);
+            Value = value;
         }
 
         /// <summary>
