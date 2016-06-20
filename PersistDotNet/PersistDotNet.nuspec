@@ -13,12 +13,14 @@
     <releaseNotes>
 	
 		- Support for TypeConverters
+		- Updated Yaml depencency to 3.90 because it had a bug that made JsonArchive to crash
 
 Can Serialize/Deserialize:
 	- Arbitrary custom types, native types, anonymous types, enums, IDictionary, IList, IConvertible
 	- Multiply and possibly cyclical references to objects
 	- Polymorphic objects
-	- External types using metadata to specify the properties to use
+	- Using converters through TypeConverterAttribute 
+	- External types using MetadataTypeAttribute to specify the properties or converter to use 
 	- Evolving types : you can add or remove properties/fields with no problem
 	- Xml, Json, Yaml and any format you want because it is extensible
 	- To/From a generic Node object that you can add/remove attributes and children
